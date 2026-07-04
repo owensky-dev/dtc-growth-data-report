@@ -1,5 +1,7 @@
 # DTC Growth Data Report Skill
 
+[中文说明](README.zh-CN.md)
+
 Codex skill for building reusable independent-store growth reporting systems that connect GA4, Google Search Console, Google Ads, and Shopify data.
 
 This skill helps Codex set up and customize a local data pipeline for ecommerce growth diagnostics, weekly boss reports, channel performance, landing page performance, Google Ads efficiency, SEO opportunities, and Shopify revenue/order analysis.
