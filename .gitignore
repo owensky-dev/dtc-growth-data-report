@@ -1,0 +1,15 @@
+.env
+*.env
+!.env.example
+*.json
+!package.json
+!tsconfig.json
+__pycache__/
+*.pyc
+.DS_Store
+data/
+reports/
+outputs/
+work/
+.venv/
+venv/

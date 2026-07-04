@@ -1,0 +1,6 @@
+interface:
+  display_name: "DTC Growth Data Report"
+  short_description: "GA4/GSC/Ads/Shopify 增长报告系统"
+  default_prompt: "Use $dtc-growth-data-report to connect GA4, GSC, Google Ads, and Shopify data, then build a weekly growth report."
+policy:
+  allow_implicit_invocation: true

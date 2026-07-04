@@ -1,0 +1,71 @@
+# DTC Growth Data Report Skill
+
+Codex skill for building reusable independent-store growth reporting systems that connect GA4, Google Search Console, Google Ads, and Shopify data.
+
+This skill helps Codex set up and customize a local data pipeline for ecommerce growth diagnostics, weekly boss reports, channel performance, landing page performance, Google Ads efficiency, SEO opportunities, and Shopify revenue/order analysis.
+
+## What It Includes
+
+- GA4 fetch script for channel and landing page performance.
+- Google Search Console fetch script for query/page SEO data.
+- Google Ads fetch script for campaign, ad group, search term, and landing page data.
+- Shopify Admin API fetch script for order-level revenue data.
+- Transform script that unifies raw source files into processed CSVs.
+- Weekly comparison report generator with current week vs previous week.
+- Boss-facing HTML dashboard generator.
+- Configuration and data contract references.
+
+## Install
+
+Copy the skill folder into your Codex skills directory:
+
+```bash
+cp -R dtc-growth-data-report ~/.codex/skills/
+```
+
+Restart Codex or start a new Codex session so the skill can be discovered.
+
+## Use
+
+Example prompt:
+
+```text
+Use $dtc-growth-data-report to connect GA4, GSC, Google Ads, and Shopify data, then build a weekly growth report.
+```
+
+For a new project, ask Codex:
+
+```text
+Use $dtc-growth-data-report to install the growth reporting pipeline into this project and generate a boss-facing weekly report.
+```
+
+## Required Configuration
+
+Create `.env` from the included `.env.example` in your project. Required credentials depend on the sources you want to connect:
+
+- GA4: service account JSON path and GA4 property ID.
+- GSC: service account JSON path and Search Console property URL.
+- Google Ads: developer token, OAuth client ID/secret, refresh token, customer ID, and optional manager account ID.
+- Shopify: shop domain, Admin API access token, and API version.
+
+Never commit `.env` or credential JSON files.
+
+## Default Outputs
+
+The installed pipeline writes:
+
+- `data/raw/`: raw GA4, GSC, Google Ads, and Shopify CSV files.
+- `data/processed/channel_performance.csv`
+- `data/processed/landing_page_performance.csv`
+- `data/processed/google_ads_diagnosis.csv`
+- `data/processed/search_query_opportunities.csv`
+- `reports/weekly_growth_diagnosis.md`
+- `outputs/weekly_growth_report_template.html`
+- `outputs/weekly_growth_report_template.md`
+- `outputs/weekly_growth_report_template.json`
+
+## Repository Topics
+
+Recommended GitHub topics:
+
+`codex-skill`, `dtc`, `ecommerce`, `shopify`, `ga4`, `google-search-console`, `google-ads`, `growth-analytics`, `marketing-analytics`, `weekly-report`
