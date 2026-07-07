@@ -14,6 +14,12 @@ from config import DATA_PROCESSED_DIR, DATA_RAW_DIR, PROJECT_ROOT, setup_logging
 
 LOGGER = setup_logging("generate_weekly_comparison_template")
 OUTPUTS_DIR = PROJECT_ROOT / "outputs"
+REQUIRED_SOURCES = {
+    "ga4": "GA4",
+    "shopify_daily": "Shopify",
+    "ads": "Google Ads",
+    "gsc": "GSC",
+}
 
 
 def read_csv(path: Path) -> pd.DataFrame:
@@ -105,34 +111,82 @@ def weighted_average(frame: pd.DataFrame, value_col: str, weight_col: str) -> fl
     return float((values * weights).sum() / total_weight) if total_weight else 0.0
 
 
-def latest_complete_date(ga4: pd.DataFrame, ads: pd.DataFrame, gsc: pd.DataFrame) -> date:
-    candidates: list[pd.Timestamp] = []
-    for frame, column in ((ga4, "parsed_date"), (ads, "parsed_date"), (gsc, "parsed_date")):
-        if not frame.empty and column in frame.columns:
-            value = frame[column].max()
-            if pd.notna(value):
-                candidates.append(value)
-    if not candidates:
-        return date.today() - timedelta(days=1)
-    return min(max(candidates).date(), date.today() - timedelta(days=1))
+def source_dates(frame: pd.DataFrame, source_name: str) -> set[date]:
+    if frame.empty or "parsed_date" not in frame.columns:
+        raise RuntimeError(f"{source_name} 缺少可用日期数据，不能生成四源对齐周报。")
+    parsed = frame["parsed_date"].dropna()
+    if parsed.empty:
+        raise RuntimeError(f"{source_name} 日期列无法解析，不能生成四源对齐周报。")
+    return set(parsed.dt.date)
+
+
+def missing_dates(available: set[date], start: date, end: date) -> list[str]:
+    day = start
+    missing: list[str] = []
+    while day <= end:
+        if day not in available:
+            missing.append(day.isoformat())
+        day += timedelta(days=1)
+    return missing
+
+
+def latest_aligned_period(sources: dict[str, pd.DataFrame]) -> tuple[date, date, date, date, dict[str, Any]]:
+    date_sets = {
+        key: source_dates(sources[key], label)
+        for key, label in REQUIRED_SOURCES.items()
+    }
+    latest_allowed = min(max(values) for values in date_sets.values())
+    latest_allowed = min(latest_allowed, date.today() - timedelta(days=1))
+    earliest_allowed = max(min(values) for values in date_sets.values())
+
+    end = latest_allowed
+    while end - timedelta(days=13) >= earliest_allowed:
+        previous_start = end - timedelta(days=13)
+        current_start = end - timedelta(days=6)
+        if all(not missing_dates(values, previous_start, end) for values in date_sets.values()):
+            coverage = {
+                "rule": "latest 7-day period aligned across GA4, Shopify, Google Ads, and GSC; previous 7 days also covered for comparison",
+                "sources": {
+                    REQUIRED_SOURCES[key]: {
+                        "first_date": min(values).isoformat(),
+                        "last_date": max(values).isoformat(),
+                        "covered_days_in_comparison_window": 14,
+                    }
+                    for key, values in date_sets.items()
+                },
+            }
+            return current_start, end, previous_start, current_start - timedelta(days=1), coverage
+        end -= timedelta(days=1)
+
+    current_start = latest_allowed - timedelta(days=6)
+    previous_start = latest_allowed - timedelta(days=13)
+    gaps = {
+        REQUIRED_SOURCES[key]: missing_dates(values, previous_start, latest_allowed)[:10]
+        for key, values in date_sets.items()
+        if missing_dates(values, previous_start, latest_allowed)
+    }
+    raise RuntimeError(
+        "找不到 GA4、Shopify、Google Ads、GSC 四源同时覆盖的最新 7 天周报周期；"
+        f"检查窗口 {previous_start.isoformat()}..{latest_allowed.isoformat()} 缺口示例：{gaps}"
+    )
 
 
 def summarize_period(
     ga4: pd.DataFrame,
-    shopify: pd.DataFrame,
+    shopify_daily: pd.DataFrame,
     ads: pd.DataFrame,
     gsc: pd.DataFrame,
     start: date,
     end: date,
 ) -> dict[str, float]:
     ga4_week = period_filter(ga4, "parsed_date", start, end)
-    shopify_week = period_filter(shopify, "parsed_date", start, end)
+    shopify_week = period_filter(shopify_daily, "parsed_date", start, end)
     ads_week = period_filter(ads, "parsed_date", start, end)
     gsc_week = period_filter(gsc, "parsed_date", start, end)
 
     sessions = metric_sum(ga4_week, "sessions")
-    orders = float(len(shopify_week)) if not shopify_week.empty else 0.0
-    revenue = metric_sum(shopify_week, "total_price")
+    orders = metric_sum(shopify_week, "orders")
+    revenue = metric_sum(shopify_week, "total_sales")
     ad_spend = metric_sum(ads_week, "cost")
     ad_clicks = metric_sum(ads_week, "clicks")
     ad_conversions = metric_sum(ads_week, "conversions")
@@ -363,6 +417,10 @@ def load_sources() -> dict[str, pd.DataFrame]:
     if not shopify.empty and "date" in shopify.columns:
         shopify["parsed_date"] = parse_iso_date(shopify["date"])
 
+    shopify_daily = read_csv(DATA_RAW_DIR / "shopify_sales_by_day_90d.csv")
+    if not shopify_daily.empty and "date" in shopify_daily.columns:
+        shopify_daily["parsed_date"] = parse_iso_date(shopify_daily["date"])
+
     ads = read_csv(DATA_RAW_DIR / "google_ads_ad_group_90d.csv")
     if not ads.empty and "date" in ads.columns:
         ads["parsed_date"] = parse_iso_date(ads["date"])
@@ -372,18 +430,15 @@ def load_sources() -> dict[str, pd.DataFrame]:
         gsc["parsed_date"] = parse_iso_date(gsc["date"])
 
     landing = read_csv(DATA_PROCESSED_DIR / "landing_page_performance.csv")
-    return {"ga4": ga4, "shopify": shopify, "ads": ads, "gsc": gsc, "landing": landing}
+    return {"ga4": ga4, "shopify": shopify, "shopify_daily": shopify_daily, "ads": ads, "gsc": gsc, "landing": landing}
 
 
 def build_report_data() -> dict[str, Any]:
     sources = load_sources()
-    end = latest_complete_date(sources["ga4"], sources["ads"], sources["gsc"])
-    current_start = end - timedelta(days=6)
-    previous_end = current_start - timedelta(days=1)
-    previous_start = previous_end - timedelta(days=6)
+    current_start, end, previous_start, previous_end, coverage = latest_aligned_period(sources)
 
-    current = summarize_period(sources["ga4"], sources["shopify"], sources["ads"], sources["gsc"], current_start, end)
-    previous = summarize_period(sources["ga4"], sources["shopify"], sources["ads"], sources["gsc"], previous_start, previous_end)
+    current = summarize_period(sources["ga4"], sources["shopify_daily"], sources["ads"], sources["gsc"], current_start, end)
+    previous = summarize_period(sources["ga4"], sources["shopify_daily"], sources["ads"], sources["gsc"], previous_start, previous_end)
     low_ctr, rank_opportunities = seo_rows(sources["gsc"], current_start, end)
 
     data = {
@@ -401,6 +456,7 @@ def build_report_data() -> dict[str, Any]:
         "low_ctr": low_ctr,
         "rank_opportunities": rank_opportunities,
         "weak_landing": landing_rows(sources["landing"]),
+        "source_coverage": coverage,
     }
     return data
 
@@ -430,6 +486,10 @@ def build_markdown(data: dict[str, Any]) -> str:
     low_ctr_md = markdown_table(data["low_ctr"], [("query", "关键词"), ("impressions", "曝光"), ("clicks", "点击"), ("ctr", "CTR"), ("position", "排名"), ("page", "页面")])
     rank_md = markdown_table(data["rank_opportunities"], [("query", "关键词"), ("impressions", "曝光"), ("clicks", "点击"), ("ctr", "CTR"), ("position", "排名"), ("page", "页面")])
     summary_lines = "\n".join(f"- {line}" for line in summary)
+    coverage_lines = "\n".join(
+        f"- {source}: {meta['first_date']} 至 {meta['last_date']}；本次对比窗口覆盖 {meta['covered_days_in_comparison_window']} 天。"
+        for source, meta in data["source_coverage"]["sources"].items()
+    )
 
     return f"""# 独立站增长周报模板
 
@@ -484,6 +544,11 @@ def build_markdown(data: dict[str, Any]) -> str:
 - Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单；ROAS 使用广告转化价值 / 广告花费。
 - 落地页诊断来自最近 90 天 processed 数据，不代表仅本周页面表现；后续如需要更精确，可把 GA4 落地页事件按周拆分。
 - 所有转化率、CTR、加购率均以百分比展示。
+- 周报日期按 GA4、Shopify、Google Ads、GSC 四源共同覆盖的最新 7 天对齐；上周对比期也要求四源覆盖。
+
+### 四源覆盖检查
+
+{coverage_lines}
 """
 
 
@@ -514,6 +579,13 @@ def build_html(data: dict[str, Any]) -> str:
     landing_html = html_table(data["weak_landing"], [("page", "落地页"), ("traffic", "流量/点击"), ("ad_cost", "广告花费"), ("add_to_cart_rate", "加购率"), ("orders", "订单")])
     low_ctr_html = html_table(data["low_ctr"], [("query", "关键词"), ("impressions", "曝光"), ("clicks", "点击"), ("ctr", "CTR"), ("position", "排名"), ("page", "页面")])
     rank_html = html_table(data["rank_opportunities"], [("query", "关键词"), ("impressions", "曝光"), ("clicks", "点击"), ("ctr", "CTR"), ("position", "排名"), ("page", "页面")])
+    coverage_html = "".join(
+        "<li>"
+        f"{html.escape(source)}: {html.escape(meta['first_date'])} 至 {html.escape(meta['last_date'])}；"
+        f"本次对比窗口覆盖 {html.escape(str(meta['covered_days_in_comparison_window']))} 天。"
+        "</li>"
+        for source, meta in data["source_coverage"]["sources"].items()
+    )
 
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -649,7 +721,9 @@ def build_html(data: dict[str, Any]) -> str:
 
     <section>
       <h2>口径说明</h2>
-      <p class="note">收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions。Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单。所有转化率、CTR、加购率均以百分比展示。</p>
+      <p class="note">收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions。Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单。所有转化率、CTR、加购率均以百分比展示。周报日期按 GA4、Shopify、Google Ads、GSC 四源共同覆盖的最新 7 天对齐；上周对比期也要求四源覆盖。</p>
+      <h3>四源覆盖检查</h3>
+      <ul class="note">{coverage_html}</ul>
     </section>
   </main>
 </body>

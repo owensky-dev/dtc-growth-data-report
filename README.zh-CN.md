@@ -16,7 +16,7 @@
 - GA4 数据拉取：渠道表现、落地页表现、加购/转化事件。
 - GSC 数据拉取：搜索词、页面、点击、曝光、CTR、平均排名。
 - Google Ads 数据拉取：广告系列、广告组、搜索词、落地页、花费、点击、转化、转化价值。
-- Shopify 数据拉取：订单、收入、税费、订单状态、来源信息。
+- Shopify 数据拉取：订单、收入、税费、订单状态、来源信息，并输出包含 0 订单日的每日销售表。
 - 数据统一转换：输出标准 processed CSV。
 - 周报模板：自动生成“本周 vs 上周”的老板版 HTML 和 Markdown 周报。
 - 独立站增长诊断看板：输出老板可读的本地 HTML dashboard。
@@ -84,6 +84,7 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 安装并运行管线后，默认生成：
 
 - `data/raw/`：GA4、GSC、Google Ads、Shopify 原始 CSV。
+- `data/raw/shopify_sales_by_day_90d.csv`：Shopify 每日订单和收入，包含 0 订单日，用于判断数据覆盖是否完整。
 - `data/processed/channel_performance.csv`
 - `data/processed/landing_page_performance.csv`
 - `data/processed/google_ads_diagnosis.csv`
@@ -100,7 +101,8 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 - 广告花费、点击、广告转化、转化价值、ROAS、CPA 默认以 Google Ads 为准。
 - SEO 点击、曝光、CTR、平均排名默认以 GSC 为准。
 - 全站转化率 = Shopify 订单数 / GA4 Sessions。
-- 周报默认比较最近完整 7 天与再往前 7 天。
+- 周报默认比较四个核心数据源共同覆盖的最近完整 7 天与再往前 7 天。
+- 如果某个数据源延迟，周报会整体回退到 GA4、Shopify、Google Ads、GSC 都有数据的最新 7 天；如果找不到四源对齐窗口，则停止生成并报告缺口。
 - 转化率、CTR、加购率等比例指标统一用百分比展示。
 
 ## 安全注意事项

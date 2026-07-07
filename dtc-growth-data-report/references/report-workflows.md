@@ -6,8 +6,10 @@ Use `scripts/generate_weekly_comparison_template.py` after raw and processed dat
 
 Default comparison:
 
-- Current week: latest complete date minus 6 days through latest complete date.
-- Previous week: the 7 days immediately before current week.
+- Current week: latest 7-day period where GA4, Shopify, Google Ads, and GSC all have daily coverage.
+- Previous week: the 7 days immediately before current week, also requiring all four sources to have daily coverage.
+- If a source is delayed, move the whole report window back until all four sources align. Do not mix a newer GA4/GSC/Ads window with stale Shopify data.
+- If no aligned 14-day comparison window exists, stop and report the missing source/date gaps rather than generating a partial report.
 
 Required sections:
 
@@ -22,6 +24,7 @@ Required sections:
 - Rank 4-20 SEO opportunity queries
 - Next-week priorities
 - Data caveats
+- Source coverage summary
 
 ## Owner Dashboard
 

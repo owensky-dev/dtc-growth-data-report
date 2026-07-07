@@ -52,9 +52,29 @@ def build_channel_performance() -> pd.DataFrame:
         grouped["cost"] = 0.0
         frames.append(grouped[["source", "channel", "sessions", "engaged_sessions", "clicks", "cost", "conversions", "orders", "revenue"]])
 
+    shopify_daily = read_csv(DATA_RAW_DIR / "shopify_sales_by_day_90d.csv")
     shopify_by_order = read_csv(DATA_RAW_DIR / "shopify_sales_by_order_90d.csv")
     shopify = read_csv(DATA_RAW_DIR / "shopify_orders_90d.csv")
-    if not shopify_by_order.empty:
+    if not shopify_daily.empty:
+        shopify_daily = numeric(shopify_daily, ["orders", "total_sales"])
+        frames.append(
+            pd.DataFrame(
+                [
+                    {
+                        "source": "Shopify",
+                        "channel": "Store Orders",
+                        "sessions": 0,
+                        "engaged_sessions": 0,
+                        "clicks": 0,
+                        "cost": 0.0,
+                        "conversions": shopify_daily["orders"].sum(),
+                        "orders": shopify_daily["orders"].sum(),
+                        "revenue": shopify_daily["total_sales"].sum(),
+                    }
+                ]
+            )
+        )
+    elif not shopify_by_order.empty:
         shopify_by_order = numeric(shopify_by_order, ["orders", "total_sales"])
         frames.append(
             pd.DataFrame(

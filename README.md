@@ -11,7 +11,7 @@ This skill helps Codex set up and customize a local data pipeline for ecommerce 
 - GA4 fetch script for channel and landing page performance.
 - Google Search Console fetch script for query/page SEO data.
 - Google Ads fetch script for campaign, ad group, search term, and landing page data.
-- Shopify Admin API fetch script for order-level revenue data.
+- Shopify Admin API fetch script for order-level revenue data plus a daily sales file that includes zero-order days.
 - Transform script that unifies raw source files into processed CSVs.
 - Weekly comparison report generator with current week vs previous week.
 - Boss-facing HTML dashboard generator.
@@ -57,6 +57,7 @@ Never commit `.env` or credential JSON files.
 The installed pipeline writes:
 
 - `data/raw/`: raw GA4, GSC, Google Ads, and Shopify CSV files.
+- `data/raw/shopify_sales_by_day_90d.csv`: Shopify daily orders and revenue, including zero-order days, used to verify source coverage.
 - `data/processed/channel_performance.csv`
 - `data/processed/landing_page_performance.csv`
 - `data/processed/google_ads_diagnosis.csv`
@@ -65,6 +66,12 @@ The installed pipeline writes:
 - `outputs/weekly_growth_report_template.html`
 - `outputs/weekly_growth_report_template.md`
 - `outputs/weekly_growth_report_template.json`
+
+## Weekly Report Data Completeness
+
+Weekly reports are generated only for the latest 7-day period that is covered by all four core sources: GA4, Shopify, Google Ads, and GSC. The previous 7 days must also be covered for week-over-week comparison.
+
+If one source is delayed, the report window moves back until all four sources align. If no aligned window exists, the generator fails with source/date gaps instead of producing a partial report.
 
 ## Repository Topics
 

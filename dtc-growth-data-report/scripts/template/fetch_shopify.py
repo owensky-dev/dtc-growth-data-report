@@ -27,6 +27,8 @@ COLUMNS = [
     "referring_site",
 ]
 
+DAILY_COLUMNS = ["date", "orders", "total_sales"]
+
 
 ORDERS_QUERY = """
 query Orders($first: Int!, $after: String, $query: String!) {
@@ -132,12 +134,33 @@ def fetch_orders(
     return rows
 
 
+def build_daily_sales(rows: list[dict], start_date: str, end_date: str) -> pd.DataFrame:
+    daily = pd.DataFrame({"date": pd.date_range(start_date, end_date, freq="D").strftime("%Y-%m-%d")})
+    if not rows:
+        daily["orders"] = 0
+        daily["total_sales"] = 0.0
+        return daily[DAILY_COLUMNS]
+
+    orders = pd.DataFrame(rows)
+    orders["date"] = pd.to_datetime(orders["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    orders["total_price"] = pd.to_numeric(orders["total_price"], errors="coerce").fillna(0)
+    grouped = orders.groupby("date", dropna=False).agg(
+        orders=("order_name", "count"),
+        total_sales=("total_price", "sum"),
+    ).reset_index()
+    daily = daily.merge(grouped, on="date", how="left")
+    daily["orders"] = pd.to_numeric(daily["orders"], errors="coerce").fillna(0).astype(int)
+    daily["total_sales"] = pd.to_numeric(daily["total_sales"], errors="coerce").fillna(0.0)
+    return daily[DAILY_COLUMNS]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Shopify orders for the latest growth diagnosis window.")
     parser.add_argument("--days", type=int, default=90)
     parser.add_argument("--start-date")
     parser.add_argument("--end-date")
     parser.add_argument("--out", default=str(DATA_RAW_DIR / "shopify_orders_90d.csv"))
+    parser.add_argument("--daily-out", default=str(DATA_RAW_DIR / "shopify_sales_by_day_90d.csv"))
     args = parser.parse_args()
 
     ensure_dirs()
@@ -159,7 +182,12 @@ def main() -> None:
     output_path = Path(args.out)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows, columns=COLUMNS).to_csv(output_path, index=False)
+    daily_path = Path(args.daily_out)
+    daily_path.parent.mkdir(parents=True, exist_ok=True)
+    daily_sales = build_daily_sales(rows, start_date, end_date)
+    daily_sales.to_csv(daily_path, index=False)
     LOGGER.info("Shopify rows=%s date_range=%s..%s out=%s", len(rows), start_date, end_date, output_path)
+    LOGGER.info("Shopify daily rows=%s out=%s", len(daily_sales), daily_path)
 
 
 if __name__ == "__main__":

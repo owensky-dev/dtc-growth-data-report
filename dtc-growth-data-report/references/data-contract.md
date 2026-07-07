@@ -25,7 +25,19 @@ The standard pipeline writes raw source files to `data/raw/`.
 ### Shopify
 
 - `shopify_orders_90d.csv`: `created_at`, `date`, `order_id`, `order_name`, `currency`, `subtotal_price`, `total_price`, `total_tax`, `financial_status`, `fulfillment_status`, `source_name`, `landing_site`, `referring_site`
+- `shopify_sales_by_day_90d.csv`: `date`, `orders`, `total_sales`. This file is required for weekly reports because it must include zero-order days; without it the pipeline cannot distinguish "no orders" from "Shopify data was not fetched."
 - Optional connector materialization: `shopify_sales_by_order_90d.csv`, `shopify_sales_by_product_90d.csv`
+
+## Weekly Coverage Contract
+
+Weekly reports must be generated only for a date window covered by all four core sources:
+
+- GA4: at least one row for each report date in `ga4_channel_90d.csv`.
+- Shopify: one row for each report date in `shopify_sales_by_day_90d.csv`, including days with `orders = 0`.
+- Google Ads: at least one row for each report date in `google_ads_ad_group_90d.csv`.
+- GSC: at least one row for each report date in `gsc_90d.csv`.
+
+The default report window is the latest 7-day period satisfying this rule. The previous 7 days must also satisfy the same coverage rule for week-over-week comparison. If no such 14-day comparison window exists, the generator must fail with source/date gaps instead of producing a partial report.
 
 ## Processed Files
 
