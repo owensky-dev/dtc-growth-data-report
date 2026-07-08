@@ -14,16 +14,19 @@ Default comparison:
 Required sections:
 
 - Executive Summary
+- Operator conclusions: state the main business judgment and the first operating move.
 - Top KPI cards
+- Revenue bridge: split revenue movement into traffic, conversion rate, and AOV effects.
+- Funnel health: show reach, add-to-cart proxy, Shopify purchases, and ad click-to-conversion efficiency.
 - Daily Google Ads spend and weekly spend total
 - Core KPI table: current week, previous week, change
 - Channel traffic changes
-- Google Ads diagnosis
-- High-click low-add-to-cart landing pages
-- High-impression low-CTR SEO queries
-- Rank 4-20 SEO opportunity queries
-- Next-week priorities
-- Data caveats
+- Google Ads diagnosis plus budget actions: add budget, reduce budget, or observe.
+- Landing page diagnosis plus page-level optimization actions.
+- SEO opportunities grouped by search intent, plus high-impression low-CTR and rank 4-20 details.
+- Anomaly alerts for changes that need operator attention.
+- Next-week action table with priority, owner, target metric, and done condition.
+- Data health checks and data caveats.
 - Source coverage summary
 
 ## Owner Dashboard

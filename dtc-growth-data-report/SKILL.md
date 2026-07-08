@@ -73,6 +73,7 @@ When customizing reports:
 - Use GSC for SEO queries, pages, clicks, impressions, CTR, and average position.
 - Render conversion rate, CTR, add-to-cart rate, and similar ratios as percentages.
 - Compare the latest four-source-aligned complete 7 days vs the previous 7 days for weekly reports unless the user requests another window.
+- For weekly boss reports, include an operator decision layer instead of only metric tables: operator conclusions, revenue bridge, funnel health, Google Ads budget actions, page optimization actions, SEO intent clusters, anomaly alerts, next-week action owners, and data health checks.
 - Keep boss-facing reports concise, Chinese-first by default, and action-oriented.
 - Keep raw data in `data/raw/`, transformed data in `data/processed/`, durable reports in `reports/` or `outputs/`.
 

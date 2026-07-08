@@ -14,6 +14,7 @@ This skill helps Codex set up and customize a local data pipeline for ecommerce 
 - Shopify Admin API fetch script for order-level revenue data plus a daily sales file that includes zero-order days.
 - Transform script that unifies raw source files into processed CSVs.
 - Weekly comparison report generator with current week vs previous week.
+- Operator-ready weekly report modules: business conclusions, revenue bridge, funnel health, Google Ads budget actions, page actions, SEO intent clusters, anomaly alerts, next-week owners, and data health checks.
 - Boss-facing HTML dashboard generator.
 - Configuration and data contract references.
 
@@ -72,6 +73,8 @@ The installed pipeline writes:
 Weekly reports are generated only for the latest 7-day period that is covered by all four core sources: GA4, Shopify, Google Ads, and GSC. The previous 7 days must also be covered for week-over-week comparison.
 
 If one source is delayed, the report window moves back until all four sources align. If no aligned window exists, the generator fails with source/date gaps instead of producing a partial report.
+
+The weekly report is designed as an operating brief, not only a metric export. It translates source data into budget moves, page fixes, SEO priorities, owner-ready next actions, and tracking health checks.
 
 ## Repository Topics
 
