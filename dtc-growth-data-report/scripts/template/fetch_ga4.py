@@ -32,6 +32,7 @@ LANDING_PAGE_COLUMNS = [
     "totalRevenue",
 ]
 LANDING_PAGE_EVENT_COLUMNS = [
+    "date",
     "landingPagePlusQueryString",
     "landing_page_url",
     "eventName",
@@ -117,20 +118,20 @@ def fetch_ga4(
         end_date=end_date,
     )
 
-    LOGGER.info("Fetching GA4 add_to_cart events by landing page")
+    LOGGER.info("Fetching GA4 add_to_cart and begin_checkout events by date and landing page")
     event_filter = FilterExpression(
         filter=Filter(
             field_name="eventName",
-            string_filter=Filter.StringFilter(
-                match_type=Filter.StringFilter.MatchType.EXACT,
-                value="add_to_cart",
+            in_list_filter=Filter.InListFilter(
+                values=["add_to_cart", "begin_checkout"],
+                case_sensitive=True,
             ),
         )
     )
     event_rows = run_report(
         client,
         property_name,
-        dimensions=["landingPagePlusQueryString", "eventName"],
+        dimensions=["date", "landingPagePlusQueryString", "eventName"],
         metrics=["eventCount"],
         start_date=start_date,
         end_date=end_date,
@@ -142,7 +143,7 @@ def fetch_ga4(
         landing_df["landing_page_url"] = landing_df["landingPagePlusQueryString"].map(lambda value: normalize_url(value, site_url))
         landing_df = landing_df[LANDING_PAGE_COLUMNS]
 
-    event_df = pd.DataFrame(event_rows, columns=["landingPagePlusQueryString", "eventName", "eventCount"])
+    event_df = pd.DataFrame(event_rows, columns=["date", "landingPagePlusQueryString", "eventName", "eventCount"])
     if not event_df.empty:
         event_df["landing_page_url"] = event_df["landingPagePlusQueryString"].map(lambda value: normalize_url(value, site_url))
         event_df = event_df[LANDING_PAGE_EVENT_COLUMNS]
@@ -155,7 +156,7 @@ def fetch_ga4(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch GA4 channel, landing page, and add-to-cart data.")
+    parser = argparse.ArgumentParser(description="Fetch GA4 channel, landing page, and dated funnel-event data.")
     parser.add_argument("--days", type=int, default=90)
     parser.add_argument("--start-date")
     parser.add_argument("--end-date")

@@ -156,12 +156,15 @@ def build_landing_page_performance() -> pd.DataFrame:
                 "sessions",
                 "engaged_sessions",
                 "add_to_cart",
+                "begin_checkout",
                 "orders",
                 "revenue",
                 "ad_clicks",
                 "ad_cost",
                 "conversion_rate",
                 "add_to_cart_rate",
+                "begin_checkout_rate",
+                "cart_to_checkout_rate",
                 "diagnosis",
             ]
         )
@@ -182,10 +185,24 @@ def build_landing_page_performance() -> pd.DataFrame:
     if not events.empty:
         events = numeric(events, ["eventCount"])
         events["landing_page_url"] = events["landing_page_url"].fillna("").map(normalize_url)
-        atc = events.groupby("landing_page_url", dropna=False).agg(add_to_cart=("eventCount", "sum")).reset_index()
-        landing = landing.merge(atc, on="landing_page_url", how="left")
+        funnel_events = (
+            events[events["eventName"].isin(["add_to_cart", "begin_checkout"])]
+            .groupby(["landing_page_url", "eventName"], dropna=False)["eventCount"]
+            .sum()
+            .unstack(fill_value=0)
+            .reset_index()
+        )
+        for event_name in ("add_to_cart", "begin_checkout"):
+            if event_name not in funnel_events.columns:
+                funnel_events[event_name] = 0
+        landing = landing.merge(
+            funnel_events[["landing_page_url", "add_to_cart", "begin_checkout"]],
+            on="landing_page_url",
+            how="left",
+        )
     else:
         landing["add_to_cart"] = 0
+        landing["begin_checkout"] = 0
 
     if not ads_lp.empty:
         ads_lp = numeric(ads_lp, ["clicks", "cost", "conversions", "conversion_value"])
@@ -205,11 +222,13 @@ def build_landing_page_performance() -> pd.DataFrame:
 
     landing = numeric(
         landing.fillna(0),
-        ["sessions", "engaged_sessions", "conversions", "orders", "revenue", "add_to_cart", "ad_clicks", "ad_cost", "ad_conversions", "ad_conversion_value"],
+        ["sessions", "engaged_sessions", "conversions", "orders", "revenue", "add_to_cart", "begin_checkout", "ad_clicks", "ad_cost", "ad_conversions", "ad_conversion_value"],
     )
     traffic_base = landing["ad_clicks"].where(landing["ad_clicks"] > 0, landing["sessions"])
     landing["conversion_rate"] = safe_divide(landing["orders"], landing["sessions"]).fillna(0)
     landing["add_to_cart_rate"] = safe_divide(landing["add_to_cart"], traffic_base).fillna(0)
+    landing["begin_checkout_rate"] = safe_divide(landing["begin_checkout"], traffic_base).fillna(0)
+    landing["cart_to_checkout_rate"] = safe_divide(landing["begin_checkout"], landing["add_to_cart"]).fillna(0)
     landing["diagnosis"] = ""
     high_traffic_low_atc = (traffic_base >= 100) & (landing["add_to_cart_rate"] < 0.02)
     landing.loc[high_traffic_low_atc, "diagnosis"] = "high_click_low_add_to_cart"

@@ -437,13 +437,49 @@ def revenue_bridge_rows(current: dict[str, float], previous: dict[str, float]) -
     return [{"driver": label, "impact": money(value), "note": note} for label, value, note in rows]
 
 
-def funnel_rows(current: dict[str, float], previous: dict[str, float], landing: pd.DataFrame) -> list[dict[str, str]]:
-    add_to_cart = metric_sum(landing, "add_to_cart")
-    landing_sessions = metric_sum(landing, "sessions")
-    atc_rate = safe_divide(add_to_cart, landing_sessions)
+def funnel_event_totals(events: pd.DataFrame, start: date, end: date) -> dict[str, float] | None:
+    if events.empty or "parsed_date" not in events.columns or "eventName" not in events.columns:
+        return None
+    period = period_filter(events, "parsed_date", start, end)
+    if period.empty:
+        return {"add_to_cart": 0.0, "begin_checkout": 0.0}
+    totals = period.groupby("eventName", dropna=False)["eventCount"].sum()
+    return {
+        "add_to_cart": float(totals.get("add_to_cart", 0) or 0),
+        "begin_checkout": float(totals.get("begin_checkout", 0) or 0),
+    }
+
+
+def funnel_rows(
+    current: dict[str, float],
+    previous: dict[str, float],
+    landing: pd.DataFrame,
+    events: pd.DataFrame,
+    current_start: date,
+    current_end: date,
+    previous_start: date,
+    previous_end: date,
+) -> list[dict[str, str]]:
+    current_events = funnel_event_totals(events, current_start, current_end)
+    previous_events = funnel_event_totals(events, previous_start, previous_end)
+    if current_events is None or previous_events is None:
+        add_to_cart = metric_sum(landing, "add_to_cart")
+        landing_sessions = metric_sum(landing, "sessions")
+        event_rows = [
+            {"stage": "兴趣", "metric": "90天落地页加购", "current": number(add_to_cart), "previous": "-", "rate": pct(safe_divide(add_to_cart, landing_sessions)), "diagnosis": "原始事件数据没有日期维度；重新运行新版 GA4 抓取后即可按周比较。"},
+        ]
+    else:
+        current_atc = current_events["add_to_cart"]
+        previous_atc = previous_events["add_to_cart"]
+        current_checkout = current_events["begin_checkout"]
+        previous_checkout = previous_events["begin_checkout"]
+        event_rows = [
+            {"stage": "兴趣", "metric": "GA4 加购", "current": number(current_atc), "previous": number(previous_atc), "rate": pct(safe_divide(current_atc, current["sessions"])), "diagnosis": "效率为加购次数 / GA4 Sessions；用于观察商品与落地页承接。"},
+            {"stage": "结账", "metric": "GA4 开始结账", "current": number(current_checkout), "previous": number(previous_checkout), "rate": pct(safe_divide(current_checkout, current_atc)), "diagnosis": "效率为开始结账 / 加购；用于识别购物车到结账的流失。"},
+        ]
     rows = [
         {"stage": "触达", "metric": "GA4 Sessions", "current": number(current["sessions"]), "previous": number(previous["sessions"]), "rate": "-", "diagnosis": "判断站点承接基数。"},
-        {"stage": "兴趣", "metric": "90天落地页加购", "current": number(add_to_cart), "previous": "-", "rate": pct(atc_rate), "diagnosis": "当前 GA4 加购事件缺少日期维度，先作为页面热度代理。"},
+        *event_rows,
         {"stage": "购买", "metric": "Shopify 订单", "current": number(current["orders"]), "previous": number(previous["orders"]), "rate": pct(current["conversion_rate"]), "diagnosis": "真实经营结果，以 Shopify 为准。"},
         {"stage": "广告", "metric": "Ads 点击到转化", "current": f"{number(current['ad_clicks'])} 点击 / {number(current['ad_conversions'])} 转化", "previous": f"{number(previous['ad_clicks'])} 点击 / {number(previous['ad_conversions'])} 转化", "rate": pct(safe_divide(current["ad_conversions"], current["ad_clicks"])), "diagnosis": "广告后台转化不等于 Shopify 订单，但可用于广告组筛选。"},
     ]
@@ -595,8 +631,9 @@ def anomaly_rows(current: dict[str, float], previous: dict[str, float]) -> list[
     return rows
 
 
-def data_health_rows(current: dict[str, float], coverage: dict[str, Any]) -> list[dict[str, str]]:
+def data_health_rows(current: dict[str, float], coverage: dict[str, Any], funnel: list[dict[str, str]]) -> list[dict[str, str]]:
     ads_vs_shopify_gap = current["ad_value"] - current["revenue"]
+    has_dated_funnel = any(row.get("metric") == "GA4 开始结账" for row in funnel)
     rows = [
         {
             "check": "四源周期",
@@ -607,6 +644,11 @@ def data_health_rows(current: dict[str, float], coverage: dict[str, Any]) -> lis
             "check": "Shopify 真实订单",
             "status": "通过" if current["orders"] >= 0 else "异常",
             "detail": f"本周 Shopify 订单 {number(current['orders'])}，收入 {money(current['revenue'])}。",
+        },
+        {
+            "check": "GA4 周度漏斗",
+            "status": "通过" if has_dated_funnel else "待修复",
+            "detail": "已按本周与上周统计 add_to_cart 和 begin_checkout。" if has_dated_funnel else "原始 GA4 事件缺少日期维度，请重新运行新版抓取脚本。",
         },
         {
             "check": "广告转化价值 vs Shopify",
@@ -631,7 +673,8 @@ def next_action_rows(data: dict[str, Any]) -> list[dict[str, str]]:
         rows.append({"priority": "P1", "task": f"优化落地页：{top_page['page']}", "owner": "站内/CRO", "target": "提升加购率和真实订单", "done": "首屏、信任、加购路径改完并上线。"})
     if top_seo:
         rows.append({"priority": "P2", "task": f"SEO 内容更新：{top_seo['cluster']}", "owner": "SEO", "target": "提升 CTR 或排名", "done": "标题/描述/内链/FAQ 更新完成。"})
-    rows.append({"priority": "P2", "task": "补齐 GA4 加购/结账事件的日期维度", "owner": "数据", "target": "下周能做完整漏斗拆解", "done": "周报可展示 Sessions -> ATC -> Checkout -> Purchase。"})
+    if not any(row.get("metric") == "GA4 开始结账" for row in data.get("funnel", [])):
+        rows.append({"priority": "P2", "task": "补齐 GA4 加购/结账事件的日期维度", "owner": "数据", "target": "下周能做完整漏斗拆解", "done": "周报可展示 Sessions -> ATC -> Checkout -> Purchase。"})
     return rows
 
 
@@ -688,8 +731,12 @@ def load_sources() -> dict[str, pd.DataFrame]:
     if not gsc.empty and "date" in gsc.columns:
         gsc["parsed_date"] = parse_iso_date(gsc["date"])
 
+    ga4_events = read_csv(DATA_RAW_DIR / "ga4_landing_page_events_90d.csv")
+    if not ga4_events.empty and "date" in ga4_events.columns:
+        ga4_events["parsed_date"] = parse_ga4_date(ga4_events["date"])
+
     landing = read_csv(DATA_PROCESSED_DIR / "landing_page_performance.csv")
-    return {"ga4": ga4, "shopify": shopify, "shopify_daily": shopify_daily, "ads": ads, "gsc": gsc, "landing": landing}
+    return {"ga4": ga4, "shopify": shopify, "shopify_daily": shopify_daily, "ads": ads, "gsc": gsc, "ga4_events": ga4_events, "landing": landing}
 
 
 def build_report_data() -> dict[str, Any]:
@@ -712,7 +759,16 @@ def build_report_data() -> dict[str, Any]:
         "operator_conclusions": operator_rows,
         "kpis": kpi_rows(current, previous),
         "revenue_bridge": revenue_bridge_rows(current, previous),
-        "funnel": funnel_rows(current, previous, sources["landing"]),
+        "funnel": funnel_rows(
+            current,
+            previous,
+            sources["landing"],
+            sources["ga4_events"],
+            current_start,
+            end,
+            previous_start,
+            previous_end,
+        ),
         "channels": channel_rows(sources["ga4"], current_start, end, previous_start, previous_end),
         "ads": ads_rows(sources["ads"], current_start, end),
         "budget_actions": budget_action_rows(sources["ads"], current_start, end),
@@ -726,7 +782,7 @@ def build_report_data() -> dict[str, Any]:
         "next_actions": [],
         "source_coverage": coverage,
     }
-    data["data_health"] = data_health_rows(current, coverage)
+    data["data_health"] = data_health_rows(current, coverage, data["funnel"])
     data["next_actions"] = next_action_rows(data)
     return data
 
@@ -1011,7 +1067,7 @@ def build_html(data: dict[str, Any]) -> str:
 
     <section>
       <h2>漏斗健康</h2>
-      <p>购买结果以 Shopify 为准；当前加购事件缺少日期维度，因此用 90 天落地页加购作为页面热度代理。</p>
+      <p>加购和开始结账按本周与上周分别统计；购买结果以 Shopify 为准。</p>
       {funnel_html}
     </section>
 

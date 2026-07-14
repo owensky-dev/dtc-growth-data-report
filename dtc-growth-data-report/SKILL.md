@@ -69,6 +69,7 @@ When customizing reports:
 
 - Use Shopify as the default source of truth for revenue and orders.
 - Use GA4 for sessions, engagement, landing page behavior, and funnel events.
+- Fetch GA4 `add_to_cart` and `begin_checkout` with the `date` dimension so weekly funnel stages use the same current and previous periods as the rest of the report.
 - Use Google Ads for spend, clicks, conversions, conversion value, ROAS, CPA, search terms, and ad landing URLs.
 - Use GSC for SEO queries, pages, clicks, impressions, CTR, and average position.
 - Render conversion rate, CTR, add-to-cart rate, and similar ratios as percentages.
@@ -87,5 +88,6 @@ Before final handoff:
 - Confirm Shopify revenue/orders came from `shopify_sales_by_day_90d.csv` or an equivalent connector-materialized daily file, so zero-order days are distinguishable from missing Shopify data.
 - Confirm HTML/Markdown reports exist and are non-empty.
 - Confirm conversion rates and CTR are percentages, not decimals.
+- Confirm GA4 funnel rows compare dated `add_to_cart` and `begin_checkout` values for the current and previous aligned weeks.
 - Confirm Google Ads cost is in account currency units, not micros.
 - Confirm no secrets appear in outputs, logs, skill files, or final response.

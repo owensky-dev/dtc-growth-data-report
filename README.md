@@ -8,13 +8,14 @@ This skill helps Codex set up and customize a local data pipeline for ecommerce 
 
 ## What It Includes
 
-- GA4 fetch script for channel and landing page performance.
+- GA4 fetch script for channel, landing page, and dated `add_to_cart` / `begin_checkout` funnel performance.
 - Google Search Console fetch script for query/page SEO data.
 - Google Ads fetch script for campaign, ad group, search term, and landing page data.
 - Shopify Admin API fetch script for order-level revenue data plus a daily sales file that includes zero-order days.
 - Transform script that unifies raw source files into processed CSVs.
 - Weekly comparison report generator with current week vs previous week.
 - Operator-ready weekly report modules: business conclusions, revenue bridge, funnel health, Google Ads budget actions, page actions, SEO intent clusters, anomaly alerts, next-week owners, and data health checks.
+- Weekly funnel comparisons use dated GA4 add-to-cart and checkout events instead of a 90-day proxy total.
 - Boss-facing HTML dashboard generator.
 - Configuration and data contract references.
 
