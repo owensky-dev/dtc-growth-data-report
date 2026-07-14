@@ -8,7 +8,7 @@ The standard pipeline writes raw source files to `data/raw/`.
 
 - `ga4_channel_90d.csv`: `date`, `sessionDefaultChannelGroup`, `sessions`, `engagedSessions`, `conversions`, `ecommercePurchases`, `totalRevenue`
 - `ga4_landing_pages_90d.csv`: `landingPagePlusQueryString`, `landing_page_url`, `sessions`, `engagedSessions`, `conversions`, `ecommercePurchases`, `totalRevenue`
-- `ga4_landing_page_events_90d.csv`: `landingPagePlusQueryString`, `landing_page_url`, `eventName`, `eventCount`
+- `ga4_landing_page_events_90d.csv`: `date`, `landingPagePlusQueryString`, `landing_page_url`, `eventName`, `eventCount`. The standard fetch includes both `add_to_cart` and `begin_checkout` so weekly funnel stages can be compared by date.
 
 ### GSC
 
@@ -55,5 +55,7 @@ The transform step should produce:
 - Ad spend, ad clicks, ad conversions, ad conversion value: Google Ads.
 - SEO impressions, clicks, CTR, average position: GSC.
 - Store conversion rate: Shopify orders divided by GA4 sessions.
+- Add-to-cart rate: GA4 `add_to_cart` events divided by GA4 sessions for the same report period.
+- Cart-to-checkout rate: GA4 `begin_checkout` events divided by GA4 `add_to_cart` events for the same report period.
 - ROAS: Google Ads conversion value divided by Google Ads cost.
 - CPA: Google Ads cost divided by Google Ads conversions; show `n/a` when conversions are zero.

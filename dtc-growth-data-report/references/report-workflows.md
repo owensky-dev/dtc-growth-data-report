@@ -17,7 +17,7 @@ Required sections:
 - Operator conclusions: state the main business judgment and the first operating move.
 - Top KPI cards
 - Revenue bridge: split revenue movement into traffic, conversion rate, and AOV effects.
-- Funnel health: show reach, add-to-cart proxy, Shopify purchases, and ad click-to-conversion efficiency.
+- Funnel health: show GA4 Sessions, dated `add_to_cart`, dated `begin_checkout`, Shopify purchases, and ad click-to-conversion efficiency. Compare GA4 funnel events for the current and previous aligned weeks; do not substitute a 90-day event total when dated data is available.
 - Daily Google Ads spend and weekly spend total
 - Core KPI table: current week, previous week, change
 - Channel traffic changes
