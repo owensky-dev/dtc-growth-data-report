@@ -201,6 +201,7 @@ def summarize_period(
         "conversion_rate": safe_divide(orders, sessions),
         "aov": safe_divide(revenue, orders),
         "ad_spend": ad_spend,
+        "site_roi": safe_divide(revenue, ad_spend),
         "ad_clicks": ad_clicks,
         "ad_conversions": ad_conversions,
         "ad_value": ad_value,
@@ -223,6 +224,7 @@ def kpi_rows(current: dict[str, float], previous: dict[str, float]) -> list[dict
         ("Google Ads 花费", "ad_spend", money, False),
         ("Google Ads ROAS", "roas", lambda value: f"{value:.2f}", False),
         ("GSC 曝光", "seo_impressions", number, False),
+        ("GSC 点击数", "seo_clicks", number, False),
         ("GSC CTR", "seo_ctr", pct, True),
     ]
     rows: list[dict[str, str]] = []
@@ -901,7 +903,7 @@ def build_markdown(data: dict[str, Any]) -> str:
 
 ## 12. 数据健康与口径
 
-- 收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions。
+- 收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions；整站 ROI = Shopify 收入 / Google Ads 总花费。
 - Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单；ROAS 使用广告转化价值 / 广告花费。
 - 落地页诊断来自最近 90 天 processed 数据，不代表仅本周页面表现；后续如需要更精确，可把 GA4 落地页事件按周拆分。
 - 所有转化率、CTR、加购率均以百分比展示。
@@ -920,10 +922,14 @@ def build_markdown(data: dict[str, Any]) -> str:
 def build_html(data: dict[str, Any]) -> str:
     summary = build_summary(data)
     cards = []
+    site_roi_delta = delta_value(
+        data["current"]["site_roi"], data["previous"]["site_roi"]
+    )["display"]
     card_specs = [
         ("Shopify 收入", money(data["current"]["revenue"]), data["kpis"][0]["change"]),
         ("订单数", number(data["current"]["orders"]), data["kpis"][1]["change"]),
         ("全站转化率", pct(data["current"]["conversion_rate"]), data["kpis"][3]["change"]),
+        ("整站 ROI", f"{data['current']['site_roi']:.2f}", site_roi_delta),
         ("Google Ads ROAS", f"{data['current']['roas']:.2f}", data["kpis"][6]["change"]),
     ]
     for label, value, delta in card_specs:
@@ -988,7 +994,7 @@ def build_html(data: dict[str, Any]) -> str:
     h3 {{ margin: 22px 0 10px; font-size: 17px; }}
     p, li {{ color: var(--muted); }}
     .period {{ color: var(--muted); font-size: 14px; }}
-    .cards {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 22px 0; }}
+    .cards {{ display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 22px 0; }}
     .card {{ background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-height: 116px; }}
     .card span {{ display: block; color: var(--muted); font-size: 13px; margin-bottom: 8px; }}
     .card strong {{ display: block; font-size: 27px; line-height: 1.15; letter-spacing: 0; }}
@@ -1117,7 +1123,7 @@ def build_html(data: dict[str, Any]) -> str:
 
     <section>
       <h2>数据健康与口径</h2>
-      <p class="note">收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions。Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单。所有转化率、CTR、加购率均以百分比展示。周报日期按 GA4、Shopify、Google Ads、GSC 四源共同覆盖的最新 7 天对齐；上周对比期也要求四源覆盖。</p>
+      <p class="note">收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions；整站 ROI = Shopify 收入 / Google Ads 总花费。Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单。所有转化率、CTR、加购率均以百分比展示。周报日期按 GA4、Shopify、Google Ads、GSC 四源共同覆盖的最新 7 天对齐；上周对比期也要求四源覆盖。</p>
       <h3>数据健康检查</h3>
       {data_health_html}
       <h3>四源覆盖检查</h3>

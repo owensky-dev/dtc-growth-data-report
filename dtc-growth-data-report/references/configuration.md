@@ -32,7 +32,8 @@ Alternative:
 ## Required For Shopify
 
 - `SHOPIFY_SHOP_DOMAIN`: store domain, e.g. `brand.myshopify.com`.
-- `SHOPIFY_ADMIN_ACCESS_TOKEN`
+- Authentication option A: `SHOPIFY_ADMIN_ACCESS_TOKEN`.
+- Authentication option B: `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`; the fetcher exchanges them for a short-lived Admin API token.
 - `SHOPIFY_API_VERSION`: default to a current supported Admin API version.
 
 If a connector is used instead of an Admin token, materialize order-level data into `data/raw/shopify_orders_90d.csv` or `data/raw/shopify_sales_by_order_90d.csv` before transforming.
@@ -45,3 +46,5 @@ If a connector is used instead of an Admin token, materialize order-level data i
 ## Safety
 
 Do not copy `.env` into shared skills, repos, report bundles, screenshots, or final replies. Only share `.env.example`.
+
+If authentication fails, repair or renew it and rerun the source fetch before transforming or generating a weekly report. Do not fall back to stale raw data.

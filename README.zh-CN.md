@@ -16,7 +16,7 @@
 - GA4 数据拉取：渠道表现、落地页表现，以及带日期维度的 `add_to_cart` / `begin_checkout` 漏斗事件。
 - GSC 数据拉取：搜索词、页面、点击、曝光、CTR、平均排名。
 - Google Ads 数据拉取：广告系列、广告组、搜索词、落地页、花费、点击、转化、转化价值。
-- Shopify 数据拉取：订单、收入、税费、订单状态、来源信息，并输出包含 0 订单日的每日销售表。
+- Shopify 数据拉取：支持 Admin token 或 client-credentials 授权，拉取订单、收入、税费、订单状态、来源信息，并输出包含 0 订单日的每日销售表。
 - 数据统一转换：输出标准 processed CSV。
 - 周报模板：自动生成“本周 vs 上周”的老板版 HTML 和 Markdown 周报。
 - 操盘手增强周报：包含经营判断、收入归因、漏斗健康、广告预算动作、页面优化动作、SEO 意图分组、异常提醒、下周行动清单和数据健康检查。
@@ -79,6 +79,7 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 
 - `SHOPIFY_SHOP_DOMAIN`
 - `SHOPIFY_ADMIN_ACCESS_TOKEN`
+- 或同时配置 `SHOPIFY_CLIENT_ID` 与 `SHOPIFY_CLIENT_SECRET`
 - `SHOPIFY_API_VERSION`
 
 ## 默认输出
@@ -98,11 +99,15 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 
 ## 报告口径
 
+- GA4、GSC、Google Ads、Shopify 四源抓取是出报表的硬前置条件。若因授权、权限、配置、依赖、网络、配额或脚本问题失败，必须先修复并重新抓取成功，不允许沿用旧 raw 数据继续生成周报；若只能由用户完成授权，则停止出报并明确所需操作。
+
 - 收入和订单默认以 Shopify 为准。
 - 流量、落地页行为、站内事件默认以 GA4 为准。
 - 广告花费、点击、广告转化、转化价值、ROAS、CPA 默认以 Google Ads 为准。
 - SEO 点击、曝光、CTR、平均排名默认以 GSC 为准。
 - 全站转化率 = Shopify 订单数 / GA4 Sessions。
+- 整站 ROI = Shopify 收入 / Google Ads 总花费，并显示在顶部经营卡片中。
+- 核心 KPI 表必须包含 GSC 点击数、曝光和 CTR。
 - 周报默认比较四个核心数据源共同覆盖的最近完整 7 天与再往前 7 天。
 - 如果某个数据源延迟，周报会整体回退到 GA4、Shopify、Google Ads、GSC 都有数据的最新 7 天；如果找不到四源对齐窗口，则停止生成并报告缺口。
 - 周报不只输出指标表，还会把结果整理成操盘动作：预算怎么调、页面怎么改、SEO 先做哪类词、下周谁负责什么。

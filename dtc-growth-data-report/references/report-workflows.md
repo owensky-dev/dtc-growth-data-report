@@ -4,6 +4,13 @@
 
 Use `scripts/generate_weekly_comparison_template.py` after raw and processed data are refreshed.
 
+Strict acquisition gate:
+
+- Run GA4, GSC, Google Ads, and Shopify fetches before transformation.
+- If any fetch fails, repair authentication, permissions, configuration, dependencies, network, quota, or code first, then rerun it. Never continue with stale raw data.
+- Generate the report only after all four fetches succeed. If user-only authorization is required, stop and report the exact action instead of producing a stale report.
+- Treat source publication delay separately from fetch failure: after successful fetches, move the aligned report window back when a provider has not published the newest day.
+
 Default comparison:
 
 - Current week: latest 7-day period where GA4, Shopify, Google Ads, and GSC all have daily coverage.
@@ -15,11 +22,11 @@ Required sections:
 
 - Executive Summary
 - Operator conclusions: state the main business judgment and the first operating move.
-- Top KPI cards
+- Top KPI cards: Shopify revenue, orders, store conversion rate, sitewide ROI (`Shopify revenue / Google Ads spend`), and Google Ads ROAS.
 - Revenue bridge: split revenue movement into traffic, conversion rate, and AOV effects.
 - Funnel health: show GA4 Sessions, dated `add_to_cart`, dated `begin_checkout`, Shopify purchases, and ad click-to-conversion efficiency. Compare GA4 funnel events for the current and previous aligned weeks; do not substitute a 90-day event total when dated data is available.
 - Daily Google Ads spend and weekly spend total
-- Core KPI table: current week, previous week, change
+- Core KPI table: current week, previous week, and change, including GSC clicks alongside impressions and CTR.
 - Channel traffic changes
 - Google Ads diagnosis plus budget actions: add budget, reduce budget, or observe.
 - Landing page diagnosis plus page-level optimization actions.

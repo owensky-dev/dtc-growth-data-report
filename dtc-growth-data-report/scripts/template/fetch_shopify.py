@@ -62,6 +62,29 @@ def shopify_endpoint(shop_domain: str, api_version: str) -> str:
     return f"https://{domain}/admin/api/{api_version}/graphql.json"
 
 
+def shopify_token_endpoint(shop_domain: str) -> str:
+    domain = shop_domain.replace("https://", "").replace("http://", "").strip("/")
+    return f"https://{domain}/admin/oauth/access_token"
+
+
+def client_credentials_token(shop_domain: str, client_id: str, client_secret: str) -> str:
+    response = requests.post(
+        shopify_token_endpoint(shop_domain),
+        data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+        },
+        headers={"Accept": "application/json"},
+        timeout=60,
+    )
+    response.raise_for_status()
+    token = response.json().get("access_token", "")
+    if not token:
+        raise RuntimeError("Shopify token exchange returned no access token")
+    return token
+
+
 def money_amount(node: dict, field: str) -> float:
     try:
         return float(node.get(field, {}).get("shopMoney", {}).get("amount") or 0)
@@ -164,7 +187,7 @@ def main() -> None:
     args = parser.parse_args()
 
     ensure_dirs()
-    settings = load_settings(["SHOPIFY_SHOP_DOMAIN", "SHOPIFY_ADMIN_ACCESS_TOKEN"])
+    settings = load_settings(["SHOPIFY_SHOP_DOMAIN"])
     api_version = settings.get("SHOPIFY_API_VERSION", "2026-01")
     start_date, end_date = (
         (args.start_date, args.end_date)
@@ -172,9 +195,23 @@ def main() -> None:
         else default_date_range(args.days)
     )
 
+    if settings.get("SHOPIFY_CLIENT_ID") and settings.get("SHOPIFY_CLIENT_SECRET"):
+        access_token = client_credentials_token(
+            settings["SHOPIFY_SHOP_DOMAIN"],
+            settings["SHOPIFY_CLIENT_ID"],
+            settings["SHOPIFY_CLIENT_SECRET"],
+        )
+    elif settings.get("SHOPIFY_ADMIN_ACCESS_TOKEN"):
+        access_token = settings["SHOPIFY_ADMIN_ACCESS_TOKEN"]
+    else:
+        raise RuntimeError(
+            "Missing Shopify authentication: set SHOPIFY_ADMIN_ACCESS_TOKEN or both "
+            "SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET."
+        )
+
     rows = fetch_orders(
         shop_domain=settings["SHOPIFY_SHOP_DOMAIN"],
-        access_token=settings["SHOPIFY_ADMIN_ACCESS_TOKEN"],
+        access_token=access_token,
         api_version=api_version,
         start_date=start_date,
         end_date=end_date,

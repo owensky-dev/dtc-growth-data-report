@@ -55,7 +55,10 @@ The transform step should produce:
 - Ad spend, ad clicks, ad conversions, ad conversion value: Google Ads.
 - SEO impressions, clicks, CTR, average position: GSC.
 - Store conversion rate: Shopify orders divided by GA4 sessions.
+- Sitewide ROI: Shopify revenue divided by total Google Ads cost for the same aligned period.
 - Add-to-cart rate: GA4 `add_to_cart` events divided by GA4 sessions for the same report period.
 - Cart-to-checkout rate: GA4 `begin_checkout` events divided by GA4 `add_to_cart` events for the same report period.
 - ROAS: Google Ads conversion value divided by Google Ads cost.
 - CPA: Google Ads cost divided by Google Ads conversions; show `n/a` when conversions are zero.
+
+The weekly JSON must persist `site_roi` for current and previous periods. The core KPI table must include GSC clicks, impressions, and CTR.
