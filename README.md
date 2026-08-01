@@ -1,65 +1,93 @@
-# DTC Growth Data Report Skill
+# DTC 独立站增长数据报告 Skill
 
-[中文说明](README.zh-CN.md)
+[English README](README.en.md)
 
-Codex skill for building reusable independent-store growth reporting systems that connect GA4, Google Search Console, Google Ads, and Shopify data.
+这是一个 Codex skill，用来搭建可复用的独立站增长数据报告系统，统一连接 GA4、Google Search Console、Google Ads 和 Shopify 数据。
 
-This skill helps Codex set up and customize a local data pipeline for ecommerce growth diagnostics, weekly boss reports, channel performance, landing page performance, Google Ads efficiency, SEO opportunities, and Shopify revenue/order analysis.
+它适合用于：
 
-## What It Includes
+- 为 DTC 独立站搭建本地数据诊断系统。
+- 自动生成老板版每周增长周报。
+- 分析渠道流量、广告效率、落地页转化、SEO 机会和 Shopify 真实收入订单。
+- 将一套已跑通的数据报告流程复用到新品牌、新站点或新项目。
 
-- GA4 fetch script for channel, landing page, and dated `add_to_cart` / `begin_checkout` funnel performance.
-- Google Search Console fetch script for query/page SEO data.
-- Google Ads fetch script for campaign, ad group, search term, and landing page data.
-- Shopify Admin API fetch script with static-token or client-credentials authentication, plus a daily sales file that includes zero-order days.
-- Transform script that unifies raw source files into processed CSVs.
-- Weekly comparison report generator with current week vs previous week.
-- Operator-ready weekly report modules: business conclusions, revenue bridge, funnel health, Google Ads budget actions, page actions, SEO intent clusters, anomaly alerts, next-week owners, and data health checks.
-- Weekly funnel comparisons use dated GA4 add-to-cart and checkout events instead of a 90-day proxy total.
-- Boss-facing HTML dashboard generator.
-- Configuration and data contract references.
+## 包含能力
 
-## Install
+- GA4 数据拉取：渠道表现、落地页表现，以及带日期维度的 `add_to_cart` / `begin_checkout` 漏斗事件。
+- GSC 数据拉取：搜索词、页面、点击、曝光、CTR、平均排名。
+- Google Ads 数据拉取：广告系列、广告组、搜索词、落地页、花费、点击、转化、转化价值。
+- Shopify 数据拉取：支持 Admin token 或 client-credentials 授权，拉取订单、收入、税费、订单状态、来源信息，并输出包含 0 订单日的每日销售表。
+- 数据统一转换：输出标准 processed CSV。
+- 周报模板：自动生成“本周 vs 上周”的老板版 HTML 和 Markdown 周报。
+- 操盘手增强周报：包含经营判断、收入归因、漏斗健康、广告预算动作、页面优化动作、SEO 意图分组、异常提醒、下周行动清单和数据健康检查。
+- 周报漏斗按本周与上周分别统计加购和开始结账，不再用 90 天事件总量代替周度数据。
+- 独立站增长诊断看板：输出老板可读的本地 HTML dashboard。
+- 配置参考、数据字段说明和报告工作流说明。
 
-Copy the skill folder into your Codex skills directory:
+## 安装
+
+把 skill 文件夹复制到 Codex skills 目录：
 
 ```bash
 cp -R dtc-growth-data-report ~/.codex/skills/
 ```
 
-Restart Codex or start a new Codex session so the skill can be discovered.
+复制后，重启 Codex 或开启新的 Codex 会话，让 skill 被自动发现。
 
-## Use
+## 使用方式
 
-Example prompt:
-
-```text
-Use $dtc-growth-data-report to connect GA4, GSC, Google Ads, and Shopify data, then build a weekly growth report.
-```
-
-For a new project, ask Codex:
+示例：
 
 ```text
-Use $dtc-growth-data-report to install the growth reporting pipeline into this project and generate a boss-facing weekly report.
+使用 $dtc-growth-data-report 帮我连接 GA4、GSC、Google Ads 和 Shopify 数据，并生成本周增长周报。
 ```
 
-## Required Configuration
+如果是在新项目中安装完整管线，可以这样说：
 
-Create `.env` from the included `.env.example` in your project. Required credentials depend on the sources you want to connect:
+```text
+使用 $dtc-growth-data-report 在这个项目里安装独立站增长数据报告系统，并生成老板版周报。
+```
 
-- GA4: service account JSON path and GA4 property ID.
-- GSC: service account JSON path and Search Console property URL.
-- Google Ads: developer token, OAuth client ID/secret, refresh token, customer ID, and optional manager account ID.
-- Shopify: shop domain, API version, and either an Admin API access token or client ID/client secret.
+## 必要配置
 
-Never commit `.env` or credential JSON files.
+在项目中根据 `.env.example` 创建 `.env`，然后填写本地密钥。不同数据源需要的配置如下：
 
-## Default Outputs
+### GA4
 
-The installed pipeline writes:
+- `GOOGLE_APPLICATION_CREDENTIALS`：Google service account JSON 文件绝对路径。
+- `GA4_PROPERTY_ID`：GA4 property ID。
 
-- `data/raw/`: raw GA4, GSC, Google Ads, and Shopify CSV files.
-- `data/raw/shopify_sales_by_day_90d.csv`: Shopify daily orders and revenue, including zero-order days, used to verify source coverage.
+### Google Search Console
+
+- `GOOGLE_APPLICATION_CREDENTIALS`：可复用同一个 service account。
+- `GSC_SITE_URL`：Search Console 站点属性 URL。
+
+### Google Ads
+
+- `GOOGLE_ADS_CUSTOMER_ID`
+- `GOOGLE_ADS_DEVELOPER_TOKEN`
+- `GOOGLE_ADS_CLIENT_ID`
+- `GOOGLE_ADS_CLIENT_SECRET`
+- `GOOGLE_ADS_REFRESH_TOKEN`
+- `GOOGLE_ADS_LOGIN_CUSTOMER_ID`
+
+也可以使用：
+
+- `GOOGLE_ADS_CONFIGURATION_FILE_PATH`
+
+### Shopify
+
+- `SHOPIFY_SHOP_DOMAIN`
+- `SHOPIFY_ADMIN_ACCESS_TOKEN`
+- 或同时配置 `SHOPIFY_CLIENT_ID` 与 `SHOPIFY_CLIENT_SECRET`
+- `SHOPIFY_API_VERSION`
+
+## 默认输出
+
+安装并运行管线后，默认生成：
+
+- `data/raw/`：GA4、GSC、Google Ads、Shopify 原始 CSV。
+- `data/raw/shopify_sales_by_day_90d.csv`：Shopify 每日订单和收入，包含 0 订单日，用于判断数据覆盖是否完整。
 - `data/processed/channel_performance.csv`
 - `data/processed/landing_page_performance.csv`
 - `data/processed/google_ads_diagnosis.csv`
@@ -69,20 +97,45 @@ The installed pipeline writes:
 - `outputs/weekly_growth_report_template.md`
 - `outputs/weekly_growth_report_template.json`
 
-## Weekly Report Data Completeness
+## 报告口径
 
-All four source fetches are a strict precondition. If authentication, permission, configuration, dependency, network, quota, or code errors break a fetch, repair the cause and rerun the source before transformation or report generation. Never publish a weekly report by silently reusing stale raw data. If user-only authorization is required, stop and report that exact action.
+- GA4、GSC、Google Ads、Shopify 四源抓取是出报表的硬前置条件。若因授权、权限、配置、依赖、网络、配额或脚本问题失败，必须先修复并重新抓取成功，不允许沿用旧 raw 数据继续生成周报；若只能由用户完成授权，则停止出报并明确所需操作。
 
-Weekly reports are generated only for the latest 7-day period that is covered by all four core sources: GA4, Shopify, Google Ads, and GSC. The previous 7 days must also be covered for week-over-week comparison.
+- 收入和订单默认以 Shopify 为准。
+- 流量、落地页行为、站内事件默认以 GA4 为准。
+- 广告花费、点击、广告转化、转化价值、ROAS、CPA 默认以 Google Ads 为准。
+- SEO 点击、曝光、CTR、平均排名默认以 GSC 为准。
+- 全站转化率 = Shopify 订单数 / GA4 Sessions。
+- 整站 ROI = Shopify 收入 / Google Ads 总花费，并显示在顶部经营卡片中。
+- 核心 KPI 表必须包含 GSC 点击数、曝光和 CTR。
+- 周报默认比较四个核心数据源共同覆盖的最近完整 7 天与再往前 7 天。
+- 如果某个数据源延迟，周报会整体回退到 GA4、Shopify、Google Ads、GSC 都有数据的最新 7 天；如果找不到四源对齐窗口，则停止生成并报告缺口。
+- 周报不只输出指标表，还会把结果整理成操盘动作：预算怎么调、页面怎么改、SEO 先做哪类词、下周谁负责什么。
+- 转化率、CTR、加购率等比例指标统一用百分比展示。
 
-If one source is delayed, the report window moves back until all four sources align. If no aligned window exists, the generator fails with source/date gaps instead of producing a partial report.
+## 安全注意事项
 
-The weekly report is designed as an operating brief, not only a metric export. It translates source data into budget moves, page fixes, SEO priorities, owner-ready next actions, and tracking health checks.
+不要提交或分享：
 
-The top cards include sitewide ROI (`Shopify revenue / Google Ads spend`). The core KPI table includes GSC clicks alongside impressions and CTR.
+- `.env`
+- Google service account JSON
+- OAuth client secret 文件
+- Google Ads refresh token
+- Shopify Admin API token
+- 任何真实密钥、账号密钥或私钥
 
-## Repository Topics
+本仓库只包含 `.env.example`，不包含真实密钥。
 
-Recommended GitHub topics:
+## 推荐 GitHub 标签
 
 `codex-skill`, `dtc`, `ecommerce`, `shopify`, `ga4`, `google-search-console`, `google-ads`, `growth-analytics`, `marketing-analytics`, `weekly-report`
+
+## 关注公众号
+
+如果这个 Skill 对你有帮助，欢迎关注微信公众号 **虎皮叔叔聊跨境独立站**，获取更多独立站增长、数据分析与 AI 营销实操内容。
+
+<p align="center">
+  <img src="assets/wechat-qr.png" alt="虎皮叔叔聊跨境独立站公众号二维码" width="900">
+</p>
+
+<p align="center">微信扫码关注「虎皮叔叔聊跨境独立站」</p>

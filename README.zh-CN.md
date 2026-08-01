@@ -1,6 +1,6 @@
 # DTC 独立站增长数据报告 Skill
 
-[English README](README.md)
+[English README](README.en.md)
 
 这是一个 Codex skill，用来搭建可复用的独立站增长数据报告系统，统一连接 GA4、Google Search Console、Google Ads 和 Shopify 数据。
 
@@ -129,3 +129,13 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 ## 推荐 GitHub 标签
 
 `codex-skill`, `dtc`, `ecommerce`, `shopify`, `ga4`, `google-search-console`, `google-ads`, `growth-analytics`, `marketing-analytics`, `weekly-report`
+
+## 关注公众号
+
+如果这个 Skill 对你有帮助，欢迎关注微信公众号 **虎皮叔叔聊跨境独立站**，获取更多独立站增长、数据分析与 AI 营销实操内容。
+
+<p align="center">
+  <img src="assets/wechat-qr.png" alt="虎皮叔叔聊跨境独立站公众号二维码" width="900">
+</p>
+
+<p align="center">微信扫码关注「虎皮叔叔聊跨境独立站」</p>
