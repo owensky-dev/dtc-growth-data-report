@@ -74,6 +74,7 @@ When customizing reports:
 - Use GA4 for sessions, engagement, landing page behavior, and funnel events.
 - Fetch GA4 `add_to_cart` and `begin_checkout` with the `date` dimension so weekly funnel stages use the same current and previous periods as the rest of the report.
 - Use Google Ads for spend, clicks, conversions, conversion value, ROAS, CPA, search terms, and ad landing URLs.
+- Use campaign-level daily Google Ads facts for totals and weekly campaign decisions so Performance Max is included; keep ad-group data only for compatible campaign detail.
 - Use GSC for SEO queries, pages, clicks, impressions, CTR, and average position.
 - Show sitewide ROI as Shopify revenue divided by total Google Ads spend. Persist it in weekly JSON and show it in the top KPI cards with week-over-week change.
 - Include GSC clicks in the core KPI comparison table alongside impressions and CTR.
@@ -96,5 +97,6 @@ Before final handoff:
 - Confirm conversion rates and CTR are percentages, not decimals.
 - Confirm GA4 funnel rows compare dated `add_to_cart` and `begin_checkout` values for the current and previous aligned weeks.
 - Confirm Google Ads cost is in account currency units, not micros.
+- Confirm campaign-level Google Ads coverage includes Performance Max and that account totals are not derived only from `ad_group` rows.
 - Confirm sitewide ROI equals Shopify revenue divided by Google Ads spend, and GSC clicks appear in the core KPI table.
 - Confirm no secrets appear in outputs, logs, skill files, or final response.

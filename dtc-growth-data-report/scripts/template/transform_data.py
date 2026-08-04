@@ -113,7 +113,7 @@ def build_channel_performance() -> pd.DataFrame:
             )
         )
 
-    ads = read_csv(DATA_RAW_DIR / "google_ads_ad_group_90d.csv")
+    ads = read_csv(DATA_RAW_DIR / "google_ads_campaign_90d.csv")
     if not ads.empty:
         ads = numeric(ads, ["impressions", "clicks", "cost", "conversions", "conversion_value"])
         frames.append(
@@ -236,20 +236,22 @@ def build_landing_page_performance() -> pd.DataFrame:
 
 
 def build_google_ads_diagnosis() -> pd.DataFrame:
-    ads = read_csv(DATA_RAW_DIR / "google_ads_ad_group_90d.csv")
+    ads = read_csv(DATA_RAW_DIR / "google_ads_campaign_90d.csv")
     if ads.empty:
         return pd.DataFrame(
             columns=["campaign_id", "campaign_name", "ad_group_id", "ad_group_name", "impressions", "clicks", "cost", "conversions", "conversion_value", "ctr", "cvr", "roas", "cpa", "diagnosis"]
         )
 
     ads = numeric(ads, ["impressions", "clicks", "cost", "conversions", "conversion_value"])
-    output = ads.groupby(["campaign_id", "campaign_name", "ad_group_id", "ad_group_name"], dropna=False).agg(
+    output = ads.groupby(["campaign_id", "campaign_name"], dropna=False).agg(
         impressions=("impressions", "sum"),
         clicks=("clicks", "sum"),
         cost=("cost", "sum"),
         conversions=("conversions", "sum"),
         conversion_value=("conversion_value", "sum"),
     ).reset_index()
+    output["ad_group_id"] = ""
+    output["ad_group_name"] = "系列级"
     output["ctr"] = safe_divide(output["clicks"], output["impressions"]).fillna(0)
     output["cvr"] = safe_divide(output["conversions"], output["clicks"]).fillna(0)
     output["roas"] = safe_divide(output["conversion_value"], output["cost"]).fillna(0)
@@ -261,7 +263,8 @@ def build_google_ads_diagnosis() -> pd.DataFrame:
     output["diagnosis"] = ""
     output.loc[high_cost & low_conversion, "diagnosis"] = "high_spend_low_conversion"
     output.loc[high_cost & ~low_conversion & low_roas, "diagnosis"] = "high_spend_low_roas"
-    return output.sort_values(["cost", "clicks"], ascending=False)
+    columns = ["campaign_id", "campaign_name", "ad_group_id", "ad_group_name", "impressions", "clicks", "cost", "conversions", "conversion_value", "ctr", "cvr", "roas", "cpa", "diagnosis"]
+    return output[columns].sort_values(["cost", "clicks"], ascending=False)
 
 
 def build_search_query_opportunities() -> pd.DataFrame:
