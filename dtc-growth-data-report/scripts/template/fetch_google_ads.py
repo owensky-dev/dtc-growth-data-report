@@ -9,6 +9,11 @@ from config import DATA_RAW_DIR, default_date_range, ensure_dirs, load_settings,
 
 
 LOGGER = setup_logging("fetch_google_ads")
+CAMPAIGN_COLUMNS = [
+    "date", "campaign_id", "campaign_name", "campaign_status", "campaign_type",
+    "impressions", "clicks", "cost", "conversions", "conversion_value",
+    "all_conversions", "all_conversion_value",
+]
 PERFORMANCE_COLUMNS = [
     "date",
     "campaign_id",
@@ -88,6 +93,48 @@ def clean_customer_id(customer_id: str) -> str:
 def stream_query(client, customer_id: str, query: str):
     service = client.get_service("GoogleAdsService")
     return service.search_stream(customer_id=clean_customer_id(customer_id), query=query)
+
+
+def fetch_campaign_performance(client, customer_id: str, start_date: str, end_date: str) -> list[dict]:
+    query = f"""
+        SELECT
+          segments.date,
+          campaign.id,
+          campaign.name,
+          campaign.status,
+          campaign.advertising_channel_type,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.conversions,
+          metrics.conversions_value,
+          metrics.all_conversions,
+          metrics.all_conversions_value
+        FROM campaign
+        WHERE segments.date BETWEEN '{start_date}' AND '{end_date}'
+        ORDER BY segments.date, campaign.id
+    """
+    rows: list[dict] = []
+    LOGGER.info("Fetching Google Ads campaign performance")
+    for batch in stream_query(client, customer_id, query):
+        for item in batch.results:
+            rows.append(
+                {
+                    "date": item.segments.date,
+                    "campaign_id": item.campaign.id,
+                    "campaign_name": item.campaign.name,
+                    "campaign_status": item.campaign.status.name,
+                    "campaign_type": item.campaign.advertising_channel_type.name,
+                    "impressions": item.metrics.impressions,
+                    "clicks": item.metrics.clicks,
+                    "cost": item.metrics.cost_micros / 1_000_000,
+                    "conversions": float(item.metrics.conversions),
+                    "conversion_value": float(item.metrics.conversions_value),
+                    "all_conversions": float(item.metrics.all_conversions),
+                    "all_conversion_value": float(item.metrics.all_conversions_value),
+                }
+            )
+    return rows
 
 
 def fetch_ad_group_performance(client, customer_id: str, start_date: str, end_date: str) -> list[dict]:
@@ -233,6 +280,8 @@ def main() -> None:
     )
 
     client = load_google_ads_client(args.config_file)
+    campaign_rows = fetch_campaign_performance(client, customer_id, start_date, end_date)
+    write_frame(campaign_rows, CAMPAIGN_COLUMNS, DATA_RAW_DIR / "google_ads_campaign_90d.csv")
     performance_rows = fetch_ad_group_performance(client, customer_id, start_date, end_date)
     write_frame(performance_rows, PERFORMANCE_COLUMNS, DATA_RAW_DIR / "google_ads_ad_group_90d.csv")
 

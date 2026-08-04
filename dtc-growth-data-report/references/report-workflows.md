@@ -9,6 +9,7 @@ Strict acquisition gate:
 - Run GA4, GSC, Google Ads, and Shopify fetches before transformation.
 - If any fetch fails, repair authentication, permissions, configuration, dependencies, network, quota, or code first, then rerun it. Never continue with stale raw data.
 - Generate the report only after all four fetches succeed. If user-only authorization is required, stop and report the exact action instead of producing a stale report.
+- Use `google_ads_campaign_90d.csv` for totals and campaign decisions. Do not infer account-wide zero conversions from ad-group data because Performance Max may have no traditional ad-group rows.
 - Treat source publication delay separately from fetch failure: after successful fetches, move the aligned report window back when a provider has not published the newest day.
 
 Default comparison:

@@ -15,7 +15,7 @@
 
 - GA4 数据拉取：渠道表现、落地页表现，以及带日期维度的 `add_to_cart` / `begin_checkout` 漏斗事件。
 - GSC 数据拉取：搜索词、页面、点击、曝光、CTR、平均排名。
-- Google Ads 数据拉取：广告系列、广告组、搜索词、落地页、花费、点击、转化、转化价值。
+- Google Ads 数据拉取：广告系列、广告组、搜索词、落地页、花费、点击、转化、转化价值；系列级总量覆盖 Performance Max。
 - Shopify 数据拉取：支持 Admin token 或 client-credentials 授权，拉取订单、收入、税费、订单状态、来源信息，并输出包含 0 订单日的每日销售表。
 - 数据统一转换：输出标准 processed CSV。
 - 周报模板：自动生成“本周 vs 上周”的老板版 HTML 和 Markdown 周报。
@@ -103,7 +103,7 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 
 - 收入和订单默认以 Shopify 为准。
 - 流量、落地页行为、站内事件默认以 GA4 为准。
-- 广告花费、点击、广告转化、转化价值、ROAS、CPA 默认以 Google Ads 为准。
+- 广告花费、点击、广告转化、转化价值、ROAS、CPA 默认以 Google Ads 系列级每日数据为准，不能仅依赖会漏掉 Performance Max 的广告组数据。
 - SEO 点击、曝光、CTR、平均排名默认以 GSC 为准。
 - 全站转化率 = Shopify 订单数 / GA4 Sessions。
 - 整站 ROI = Shopify 收入 / Google Ads 总花费，并显示在顶部经营卡片中。

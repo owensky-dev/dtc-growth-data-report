@@ -275,7 +275,7 @@ def ads_rows(ads_raw: pd.DataFrame, current_start: date, current_end: date) -> l
     if current.empty:
         return []
     grouped = (
-        current.groupby(["campaign_name", "ad_group_name"], dropna=False)
+        current.groupby(["campaign_name"], dropna=False)
         .agg({"cost": "sum", "clicks": "sum", "conversions": "sum", "conversion_value": "sum"})
         .reset_index()
     )
@@ -287,7 +287,7 @@ def ads_rows(ads_raw: pd.DataFrame, current_start: date, current_end: date) -> l
         rows.append(
             {
                 "campaign": str(row["campaign_name"]),
-                "ad_group": str(row["ad_group_name"]),
+                "ad_group": "系列级",
                 "cost": money(float(row["cost"])),
                 "clicks": number(float(row["clicks"])),
                 "conversions": number(float(row["conversions"])),
@@ -483,7 +483,7 @@ def funnel_rows(
         {"stage": "触达", "metric": "GA4 Sessions", "current": number(current["sessions"]), "previous": number(previous["sessions"]), "rate": "-", "diagnosis": "判断站点承接基数。"},
         *event_rows,
         {"stage": "购买", "metric": "Shopify 订单", "current": number(current["orders"]), "previous": number(previous["orders"]), "rate": pct(current["conversion_rate"]), "diagnosis": "真实经营结果，以 Shopify 为准。"},
-        {"stage": "广告", "metric": "Ads 点击到转化", "current": f"{number(current['ad_clicks'])} 点击 / {number(current['ad_conversions'])} 转化", "previous": f"{number(previous['ad_clicks'])} 点击 / {number(previous['ad_conversions'])} 转化", "rate": pct(safe_divide(current["ad_conversions"], current["ad_clicks"])), "diagnosis": "广告后台转化不等于 Shopify 订单，但可用于广告组筛选。"},
+        {"stage": "广告", "metric": "Ads 点击到转化", "current": f"{number(current['ad_clicks'])} 点击 / {number(current['ad_conversions'])} 转化", "previous": f"{number(previous['ad_clicks'])} 点击 / {number(previous['ad_conversions'])} 转化", "rate": pct(safe_divide(current["ad_conversions"], current["ad_clicks"])), "diagnosis": "广告后台转化不等于 Shopify 订单，但可用于广告系列筛选。"},
     ]
     return rows
 
@@ -493,7 +493,7 @@ def budget_action_rows(ads_raw: pd.DataFrame, current_start: date, current_end: 
     if current.empty:
         return []
     grouped = (
-        current.groupby(["campaign_name", "ad_group_name"], dropna=False)
+        current.groupby(["campaign_name"], dropna=False)
         .agg({"cost": "sum", "clicks": "sum", "conversions": "sum", "conversion_value": "sum"})
         .reset_index()
     )
@@ -520,7 +520,7 @@ def budget_action_rows(ads_raw: pd.DataFrame, current_start: date, current_end: 
         rows.append({
             "action": action,
             "campaign": shorten(str(row["campaign_name"]), 36),
-            "ad_group": shorten(str(row["ad_group_name"]), 30),
+            "ad_group": "系列级",
             "cost": money(cost),
             "conversions": number(conversions),
             "roas": f"{roas:.2f}",
@@ -725,7 +725,7 @@ def load_sources() -> dict[str, pd.DataFrame]:
     if not shopify_daily.empty and "date" in shopify_daily.columns:
         shopify_daily["parsed_date"] = parse_iso_date(shopify_daily["date"])
 
-    ads = read_csv(DATA_RAW_DIR / "google_ads_ad_group_90d.csv")
+    ads = read_csv(DATA_RAW_DIR / "google_ads_campaign_90d.csv")
     if not ads.empty and "date" in ads.columns:
         ads["parsed_date"] = parse_iso_date(ads["date"])
 

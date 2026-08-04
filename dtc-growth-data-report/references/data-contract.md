@@ -16,6 +16,7 @@ The standard pipeline writes raw source files to `data/raw/`.
 
 ### Google Ads
 
+- `google_ads_campaign_90d.csv`: required daily campaign facts with `date`, `campaign_id`, `campaign_name`, `campaign_status`, `campaign_type`, `impressions`, `clicks`, `cost`, `conversions`, `conversion_value`, `all_conversions`, `all_conversion_value`. Weekly totals and campaign reporting use this file so Performance Max is included.
 - `google_ads_ad_group_90d.csv`: `date`, `campaign_id`, `campaign_name`, `ad_group_id`, `ad_group_name`, `impressions`, `clicks`, `cost`, `conversions`, `conversion_value`
 - `google_ads_search_terms_90d.csv`: ad group fields plus `search_term`
 - `google_ads_landing_pages_90d.csv`: ad group fields plus `landing_page_url`
@@ -34,7 +35,7 @@ Weekly reports must be generated only for a date window covered by all four core
 
 - GA4: at least one row for each report date in `ga4_channel_90d.csv`.
 - Shopify: one row for each report date in `shopify_sales_by_day_90d.csv`, including days with `orders = 0`.
-- Google Ads: at least one row for each report date in `google_ads_ad_group_90d.csv`.
+- Google Ads: at least one row for each report date in `google_ads_campaign_90d.csv`.
 - GSC: at least one row for each report date in `gsc_90d.csv`.
 
 The default report window is the latest 7-day period satisfying this rule. The previous 7 days must also satisfy the same coverage rule for week-over-week comparison. If no such 14-day comparison window exists, the generator must fail with source/date gaps instead of producing a partial report.
@@ -52,7 +53,7 @@ The transform step should produce:
 
 - Revenue and orders: Shopify.
 - Sessions and landing behavior: GA4.
-- Ad spend, ad clicks, ad conversions, ad conversion value: Google Ads.
+- Ad spend, ad clicks, ad conversions, ad conversion value: Google Ads campaign-level daily facts, including Performance Max.
 - SEO impressions, clicks, CTR, average position: GSC.
 - Store conversion rate: Shopify orders divided by GA4 sessions.
 - Sitewide ROI: Shopify revenue divided by total Google Ads cost for the same aligned period.
