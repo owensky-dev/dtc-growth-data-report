@@ -57,6 +57,8 @@ The transform step should produce:
 - SEO impressions, clicks, CTR, average position: GSC.
 - Store conversion rate: Shopify orders divided by GA4 sessions.
 - Sitewide ROI: Shopify revenue divided by total Google Ads cost for the same aligned period.
+- Purchase tracking rate: GA4 `ecommercePurchases` divided by Shopify orders for the same aligned period. When both are zero, report 100% coverage rather than a divide-by-zero error.
+- Purchase count gap: Shopify orders minus GA4 `ecommercePurchases`. Purchase revenue gap: Shopify revenue minus GA4 `totalRevenue`. These aggregate fields are health signals only; exact missing orders require Shopify paid-order IDs versus BigQuery `transaction_id` reconciliation.
 - Add-to-cart rate: GA4 `add_to_cart` events divided by GA4 sessions for the same report period.
 - Cart-to-checkout rate: GA4 `begin_checkout` events divided by GA4 `add_to_cart` events for the same report period.
 - ROAS: Google Ads conversion value divided by Google Ads cost.
