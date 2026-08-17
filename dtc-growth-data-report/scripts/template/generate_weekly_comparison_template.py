@@ -185,6 +185,8 @@ def summarize_period(
     gsc_week = period_filter(gsc, "parsed_date", start, end)
 
     sessions = metric_sum(ga4_week, "sessions")
+    ga4_purchases = metric_sum(ga4_week, "ecommercePurchases")
+    ga4_purchase_revenue = metric_sum(ga4_week, "totalRevenue")
     orders = metric_sum(shopify_week, "orders")
     revenue = metric_sum(shopify_week, "total_sales")
     ad_spend = metric_sum(ads_week, "cost")
@@ -197,6 +199,11 @@ def summarize_period(
     return {
         "revenue": revenue,
         "orders": orders,
+        "ga4_purchases": ga4_purchases,
+        "ga4_purchase_revenue": ga4_purchase_revenue,
+        "purchase_count_gap": orders - ga4_purchases,
+        "purchase_revenue_gap": revenue - ga4_purchase_revenue,
+        "purchase_tracking_rate": safe_divide(ga4_purchases, orders) if orders else (1.0 if ga4_purchases == 0 else 0.0),
         "sessions": sessions,
         "conversion_rate": safe_divide(orders, sessions),
         "aov": safe_divide(revenue, orders),
@@ -635,7 +642,19 @@ def anomaly_rows(current: dict[str, float], previous: dict[str, float]) -> list[
 
 def data_health_rows(current: dict[str, float], coverage: dict[str, Any], funnel: list[dict[str, str]]) -> list[dict[str, str]]:
     ads_vs_shopify_gap = current["ad_value"] - current["revenue"]
+    purchase_count_gap = current.get("purchase_count_gap", 0.0)
+    ga4_purchases = current.get("ga4_purchases", 0.0)
+    ga4_purchase_revenue = current.get("ga4_purchase_revenue", 0.0)
     has_dated_funnel = any(row.get("metric") == "GA4 开始结账" for row in funnel)
+    if purchase_count_gap > 0:
+        purchase_status = "高风险"
+        purchase_gap_text = f"GA4 比 Shopify 少 {number(purchase_count_gap)} 单"
+    elif purchase_count_gap < 0:
+        purchase_status = "异常"
+        purchase_gap_text = f"GA4 比 Shopify 多 {number(abs(purchase_count_gap))} 单"
+    else:
+        purchase_status = "通过"
+        purchase_gap_text = "订单数一致"
     rows = [
         {
             "check": "四源周期",
@@ -646,6 +665,15 @@ def data_health_rows(current: dict[str, float], coverage: dict[str, Any], funnel
             "check": "Shopify 真实订单",
             "status": "通过" if current["orders"] >= 0 else "异常",
             "detail": f"本周 Shopify 订单 {number(current['orders'])}，收入 {money(current['revenue'])}。",
+        },
+        {
+            "check": "Shopify vs GA4 purchase",
+            "status": purchase_status,
+            "detail": (
+                f"Shopify {number(current['orders'])} 单 / {money(current['revenue'])}；"
+                f"GA4 purchase {number(ga4_purchases)} 单 / {money(ga4_purchase_revenue)}；"
+                f"{purchase_gap_text}。聚合差异只用于告警，需用 BigQuery transaction_id 对账后确认。"
+            ),
         },
         {
             "check": "GA4 周度漏斗",
@@ -669,6 +697,14 @@ def next_action_rows(data: dict[str, Any]) -> list[dict[str, str]]:
     top_page = pages[0] if pages else None
     top_seo = seo[0] if seo else None
     rows = []
+    if data.get("current", {}).get("purchase_count_gap", 0) > 0:
+        rows.append({
+            "priority": "P0",
+            "task": "核对 Shopify paid order 与 GA4 BigQuery transaction_id",
+            "owner": "数据/追踪",
+            "target": "确认 GA4 purchase 漏记数量和收入影响",
+            "done": "完成逐单核验；不在本报告流程自动补发，需交给受控 GA4 recovery 流程。",
+        })
     if top_budget:
         rows.append({"priority": "P0", "task": f"{top_budget['action']}：{top_budget['campaign']} / {top_budget['ad_group']}", "owner": "投放", "target": "降低无效花费，观察 CPA/ROAS", "done": "预算动作完成并在 3 天后复盘。"})
     if top_page:
@@ -797,12 +833,18 @@ def build_summary(data: dict[str, Any]) -> list[str]:
     roas_delta = delta_value(current["roas"], previous["roas"])["display"]
     seo_ctr_delta = pp_delta(current["seo_ctr"], previous["seo_ctr"])
     top_action = data["next_actions"][0]["task"] if data.get("next_actions") else "先处理最大经营杠杆。"
-    return [
+    summary = [
         f"本周 Shopify 收入 {money(current['revenue'])}，订单 {number(current['orders'])}，较上周收入变化 {revenue_delta}；转化率 {pct(current['conversion_rate'])}，较上周 {cvr_delta}。",
         f"Google Ads 本周花费 {money(current['ad_spend'])}，ROAS {current['roas']:.2f}，较上周 {roas_delta}；广告转化价值 {money(current['ad_value'])}。",
         f"GSC 本周曝光 {number(current['seo_impressions'])}、点击 {number(current['seo_clicks'])}，CTR {pct(current['seo_ctr'])}，较上周 {seo_ctr_delta}。",
         f"下周第一动作：{top_action}",
     ]
+    if current.get("purchase_count_gap", 0) != 0:
+        summary.insert(
+            0,
+            f"数据风险：Shopify {number(current['orders'])} 单，GA4 purchase {number(current['ga4_purchases'])} 单；先按 BigQuery transaction_id 逐单核验，再做渠道或预算判断。",
+        )
+    return summary
 
 
 def build_markdown(data: dict[str, Any]) -> str:

@@ -16,6 +16,7 @@ This skill helps Codex set up and customize a local data pipeline for ecommerce 
 - Weekly comparison report generator with current week vs previous week.
 - Operator-ready weekly report modules: business conclusions, revenue bridge, funnel health, Google Ads budget actions, page actions, SEO intent clusters, anomaly alerts, next-week owners, and data health checks.
 - Weekly funnel comparisons use dated GA4 add-to-cart and checkout events instead of a 90-day proxy total.
+- Purchase-integrity health compares aligned Shopify orders/revenue with GA4 purchases/revenue, escalates count gaps to transaction-level BigQuery reconciliation, and never auto-sends recovery events.
 - Boss-facing HTML dashboard generator.
 - Configuration and data contract references.
 

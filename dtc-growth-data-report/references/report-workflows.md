@@ -26,6 +26,7 @@ Required sections:
 - Top KPI cards: Shopify revenue, orders, store conversion rate, sitewide ROI (`Shopify revenue / Google Ads spend`), and Google Ads ROAS.
 - Revenue bridge: split revenue movement into traffic, conversion rate, and AOV effects.
 - Funnel health: show GA4 Sessions, dated `add_to_cart`, dated `begin_checkout`, Shopify purchases, and ad click-to-conversion efficiency. Compare GA4 funnel events for the current and previous aligned weeks; do not substitute a 90-day event total when dated data is available.
+- Data health: compare Shopify orders/revenue with GA4 `ecommercePurchases`/`totalRevenue` for the same aligned week. Put a count gap in the Executive Summary and P0 actions, but do not identify or repair orders until BigQuery `transaction_id` reconciliation confirms them. Hand authorized recovery to `$ga4-data-analysis`; this report remains read-only.
 - Daily Google Ads spend and weekly spend total
 - Core KPI table: current week, previous week, and change, including GSC clicks alongside impressions and CTR.
 - Channel traffic changes
