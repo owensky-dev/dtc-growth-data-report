@@ -11,6 +11,9 @@ Strict acquisition gate:
 - Generate the report only after all four fetches succeed. If user-only authorization is required, stop and report the exact action instead of producing a stale report.
 - Use `google_ads_campaign_90d.csv` for totals and campaign decisions. Do not infer account-wide zero conversions from ad-group data because Performance Max may have no traditional ad-group rows.
 - Treat source publication delay separately from fetch failure: after successful fetches, move the aligned report window back when a provider has not published the newest day.
+- Use GSC property-level daily totals for weekly KPIs and coverage; keep query/page/country/device rows only for SEO opportunity detail.
+- Convert Shopify `createdAt` into the GA4 Property timezone before assigning dates, and build daily business totals from paid, non-test, non-cancelled orders.
+- Fail closed when order-level paid count/revenue does not reconcile to the Shopify daily table for either comparison week; do not classify a partial raw file as an Online Store/offsite difference.
 
 Default comparison:
 
@@ -26,7 +29,7 @@ Required sections:
 - Top KPI cards: Shopify revenue, orders, store conversion rate, sitewide ROI (`Shopify revenue / Google Ads spend`), and Google Ads ROAS.
 - Revenue bridge: split revenue movement into traffic, conversion rate, and AOV effects.
 - Funnel health: show GA4 Sessions, dated `add_to_cart`, dated `begin_checkout`, Shopify purchases, and ad click-to-conversion efficiency. Compare GA4 funnel events for the current and previous aligned weeks; do not substitute a 90-day event total when dated data is available.
-- Data health: compare Shopify orders/revenue with GA4 `ecommercePurchases`/`totalRevenue` for the same aligned week. Put a count gap in the Executive Summary and P0 actions, but do not identify or repair orders until BigQuery `transaction_id` reconciliation confirms them. Hand authorized recovery to `$ga4-data-analysis`; this report remains read-only.
+- Data health: compare Shopify Online Store (`source_name=web`) paid-order count/revenue with GA4 `ecommercePurchases`/`totalRevenue` for the same aligned week. Show Shop/POS/draft/app/offsite orders separately while retaining them in Shopify business totals. Put the residual Online Store count gap in the Executive Summary and P0 actions, but do not identify or repair orders until BigQuery `transaction_id` reconciliation confirms them. Hand authorized recovery to `$ga4-data-analysis`; this report remains read-only.
 - Daily Google Ads spend and weekly spend total
 - Core KPI table: current week, previous week, and change, including GSC clicks alongside impressions and CTR.
 - Channel traffic changes

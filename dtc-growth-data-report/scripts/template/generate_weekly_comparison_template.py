@@ -173,6 +173,7 @@ def latest_aligned_period(sources: dict[str, pd.DataFrame]) -> tuple[date, date,
 
 def summarize_period(
     ga4: pd.DataFrame,
+    shopify_orders: pd.DataFrame,
     shopify_daily: pd.DataFrame,
     ads: pd.DataFrame,
     gsc: pd.DataFrame,
@@ -180,6 +181,7 @@ def summarize_period(
     end: date,
 ) -> dict[str, float]:
     ga4_week = period_filter(ga4, "parsed_date", start, end)
+    shopify_orders_week = period_filter(shopify_orders, "parsed_date", start, end)
     shopify_week = period_filter(shopify_daily, "parsed_date", start, end)
     ads_week = period_filter(ads, "parsed_date", start, end)
     gsc_week = period_filter(gsc, "parsed_date", start, end)
@@ -189,6 +191,48 @@ def summarize_period(
     ga4_purchase_revenue = metric_sum(ga4_week, "totalRevenue")
     orders = metric_sum(shopify_week, "orders")
     revenue = metric_sum(shopify_week, "total_sales")
+    required_order_columns = {
+        "financial_status",
+        "test",
+        "cancelled_at",
+        "source_name",
+        "total_price",
+    }
+    missing_order_columns = required_order_columns - set(shopify_orders_week.columns)
+    if missing_order_columns or ((orders or ga4_purchases) and shopify_orders_week.empty):
+        detail = f" missing columns={sorted(missing_order_columns)}" if missing_order_columns else ""
+        raise RuntimeError(
+            "Shopify order-level rows are required for Online Store vs GA4 purchase integrity;"
+            f" refresh shopify_orders_90d.csv for the report window.{detail}"
+        )
+    if shopify_orders_week.empty:
+        paid_orders = shopify_orders_week
+    else:
+        paid_mask = shopify_orders_week["financial_status"].fillna("").astype(str).str.upper().eq("PAID")
+        paid_mask &= ~shopify_orders_week["test"].fillna(False).astype(str).str.lower().isin({"true", "1", "yes"})
+        paid_mask &= shopify_orders_week["cancelled_at"].fillna("").astype(str).str.strip().eq("")
+        paid_orders = shopify_orders_week[paid_mask].copy()
+    paid_order_count = float(len(paid_orders))
+    paid_order_revenue = metric_sum(paid_orders, "total_price")
+    if abs(paid_order_count - orders) > 0.001 or abs(paid_order_revenue - revenue) > 0.01:
+        raise RuntimeError(
+            "Shopify order-level paid rows do not match shopify_sales_by_day_90d.csv "
+            f"for {start.isoformat()}..{end.isoformat()}: "
+            f"orders {number(paid_order_count)} vs {number(orders)}, "
+            f"revenue {money(paid_order_revenue)} vs {money(revenue)}."
+        )
+    online_store_orders = paid_orders[
+        paid_orders.get("source_name", pd.Series(index=paid_orders.index, dtype="object"))
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .eq("web")
+    ]
+    offsite_orders = paid_orders.drop(index=online_store_orders.index)
+    online_store_order_count = float(len(online_store_orders))
+    online_store_revenue = metric_sum(online_store_orders, "total_price")
+    offsite_order_count = float(len(offsite_orders))
+    offsite_revenue = metric_sum(offsite_orders, "total_price")
     ad_spend = metric_sum(ads_week, "cost")
     ad_clicks = metric_sum(ads_week, "clicks")
     ad_conversions = metric_sum(ads_week, "conversions")
@@ -201,9 +245,13 @@ def summarize_period(
         "orders": orders,
         "ga4_purchases": ga4_purchases,
         "ga4_purchase_revenue": ga4_purchase_revenue,
-        "purchase_count_gap": orders - ga4_purchases,
-        "purchase_revenue_gap": revenue - ga4_purchase_revenue,
-        "purchase_tracking_rate": safe_divide(ga4_purchases, orders) if orders else (1.0 if ga4_purchases == 0 else 0.0),
+        "shopify_online_store_orders": online_store_order_count,
+        "shopify_online_store_revenue": online_store_revenue,
+        "shopify_offsite_orders": offsite_order_count,
+        "shopify_offsite_revenue": offsite_revenue,
+        "purchase_count_gap": online_store_order_count - ga4_purchases,
+        "purchase_revenue_gap": online_store_revenue - ga4_purchase_revenue,
+        "purchase_tracking_rate": safe_divide(ga4_purchases, online_store_order_count) if online_store_order_count else (1.0 if ga4_purchases == 0 else 0.0),
         "sessions": sessions,
         "conversion_rate": safe_divide(orders, sessions),
         "aov": safe_divide(revenue, orders),
@@ -643,15 +691,20 @@ def anomaly_rows(current: dict[str, float], previous: dict[str, float]) -> list[
 def data_health_rows(current: dict[str, float], coverage: dict[str, Any], funnel: list[dict[str, str]]) -> list[dict[str, str]]:
     ads_vs_shopify_gap = current["ad_value"] - current["revenue"]
     purchase_count_gap = current.get("purchase_count_gap", 0.0)
+    purchase_revenue_gap = current.get("purchase_revenue_gap", 0.0)
+    purchase_tracking_rate = current.get("purchase_tracking_rate", 0.0)
     ga4_purchases = current.get("ga4_purchases", 0.0)
     ga4_purchase_revenue = current.get("ga4_purchase_revenue", 0.0)
     has_dated_funnel = any(row.get("metric") == "GA4 开始结账" for row in funnel)
     if purchase_count_gap > 0:
         purchase_status = "高风险"
-        purchase_gap_text = f"GA4 比 Shopify 少 {number(purchase_count_gap)} 单"
+        purchase_gap_text = f"GA4 比 Shopify Online Store 少 {number(purchase_count_gap)} 单"
     elif purchase_count_gap < 0:
         purchase_status = "异常"
-        purchase_gap_text = f"GA4 比 Shopify 多 {number(abs(purchase_count_gap))} 单"
+        purchase_gap_text = f"GA4 比 Shopify Online Store 多 {number(abs(purchase_count_gap))} 单"
+    elif abs(purchase_revenue_gap) > 0.01:
+        purchase_status = "异常"
+        purchase_gap_text = "订单数一致但收入不一致"
     else:
         purchase_status = "通过"
         purchase_gap_text = "订单数一致"
@@ -667,12 +720,16 @@ def data_health_rows(current: dict[str, float], coverage: dict[str, Any], funnel
             "detail": f"本周 Shopify 订单 {number(current['orders'])}，收入 {money(current['revenue'])}。",
         },
         {
-            "check": "Shopify vs GA4 purchase",
+            "check": "Shopify Online Store vs GA4 purchase",
             "status": purchase_status,
             "detail": (
-                f"Shopify {number(current['orders'])} 单 / {money(current['revenue'])}；"
+                f"Shopify 全渠道 {number(current['orders'])} 单 / {money(current['revenue'])}；"
+                f"其中 Online Store {number(current['shopify_online_store_orders'])} 单 / {money(current['shopify_online_store_revenue'])} 纳入网页 GA4 对账，"
+                f"Shop/其他站外 {number(current['shopify_offsite_orders'])} 单 / {money(current['shopify_offsite_revenue'])} 单列；"
                 f"GA4 purchase {number(ga4_purchases)} 单 / {money(ga4_purchase_revenue)}；"
-                f"{purchase_gap_text}。聚合差异只用于告警，需用 BigQuery transaction_id 对账后确认。"
+                f"追踪率 {pct(purchase_tracking_rate)}，订单差 {number(purchase_count_gap)}，"
+                f"收入差 {money(purchase_revenue_gap)}；{purchase_gap_text}。"
+                "聚合差异只用于告警，需用 BigQuery transaction_id 对账后确认。"
             ),
         },
         {
@@ -697,12 +754,12 @@ def next_action_rows(data: dict[str, Any]) -> list[dict[str, str]]:
     top_page = pages[0] if pages else None
     top_seo = seo[0] if seo else None
     rows = []
-    if data.get("current", {}).get("purchase_count_gap", 0) > 0:
+    if data.get("current", {}).get("purchase_count_gap", 0) != 0:
         rows.append({
             "priority": "P0",
-            "task": "核对 Shopify paid order 与 GA4 BigQuery transaction_id",
+            "task": "核对 Shopify Online Store paid order 与 GA4 BigQuery transaction_id",
             "owner": "数据/追踪",
-            "target": "确认 GA4 purchase 漏记数量和收入影响",
+            "target": "确认网页订单的 GA4 purchase 数量差异和收入影响",
             "done": "完成逐单核验；不在本报告流程自动补发，需交给受控 GA4 recovery 流程。",
         })
     if top_budget:
@@ -765,25 +822,29 @@ def load_sources() -> dict[str, pd.DataFrame]:
     if not ads.empty and "date" in ads.columns:
         ads["parsed_date"] = parse_iso_date(ads["date"])
 
-    gsc = read_csv(DATA_RAW_DIR / "gsc_90d.csv")
+    gsc = read_csv(DATA_RAW_DIR / "gsc_daily_90d.csv")
     if not gsc.empty and "date" in gsc.columns:
         gsc["parsed_date"] = parse_iso_date(gsc["date"])
+
+    gsc_detail = read_csv(DATA_RAW_DIR / "gsc_90d.csv")
+    if not gsc_detail.empty and "date" in gsc_detail.columns:
+        gsc_detail["parsed_date"] = parse_iso_date(gsc_detail["date"])
 
     ga4_events = read_csv(DATA_RAW_DIR / "ga4_landing_page_events_90d.csv")
     if not ga4_events.empty and "date" in ga4_events.columns:
         ga4_events["parsed_date"] = parse_ga4_date(ga4_events["date"])
 
     landing = read_csv(DATA_PROCESSED_DIR / "landing_page_performance.csv")
-    return {"ga4": ga4, "shopify": shopify, "shopify_daily": shopify_daily, "ads": ads, "gsc": gsc, "ga4_events": ga4_events, "landing": landing}
+    return {"ga4": ga4, "shopify": shopify, "shopify_daily": shopify_daily, "ads": ads, "gsc": gsc, "gsc_detail": gsc_detail, "ga4_events": ga4_events, "landing": landing}
 
 
 def build_report_data() -> dict[str, Any]:
     sources = load_sources()
     current_start, end, previous_start, previous_end, coverage = latest_aligned_period(sources)
 
-    current = summarize_period(sources["ga4"], sources["shopify_daily"], sources["ads"], sources["gsc"], current_start, end)
-    previous = summarize_period(sources["ga4"], sources["shopify_daily"], sources["ads"], sources["gsc"], previous_start, previous_end)
-    low_ctr, rank_opportunities = seo_rows(sources["gsc"], current_start, end)
+    current = summarize_period(sources["ga4"], sources["shopify"], sources["shopify_daily"], sources["ads"], sources["gsc"], current_start, end)
+    previous = summarize_period(sources["ga4"], sources["shopify"], sources["shopify_daily"], sources["ads"], sources["gsc"], previous_start, previous_end)
+    low_ctr, rank_opportunities = seo_rows(sources["gsc_detail"], current_start, end)
     operator_rows = operator_conclusions(current, previous)
 
     data = {
@@ -813,7 +874,7 @@ def build_report_data() -> dict[str, Any]:
         "daily_ad_spend": daily_ad_spend_rows(sources["ads"], current_start, end),
         "low_ctr": low_ctr,
         "rank_opportunities": rank_opportunities,
-        "seo_clusters": seo_cluster_rows(sources["gsc"], current_start, end),
+        "seo_clusters": seo_cluster_rows(sources["gsc_detail"], current_start, end),
         "weak_landing": landing_rows(sources["landing"]),
         "page_actions": page_action_rows(sources["landing"]),
         "anomalies": anomaly_rows(current, previous),
@@ -842,7 +903,7 @@ def build_summary(data: dict[str, Any]) -> list[str]:
     if current.get("purchase_count_gap", 0) != 0:
         summary.insert(
             0,
-            f"数据风险：Shopify {number(current['orders'])} 单，GA4 purchase {number(current['ga4_purchases'])} 单；先按 BigQuery transaction_id 逐单核验，再做渠道或预算判断。",
+            f"数据风险：Shopify Online Store {number(current['shopify_online_store_orders'])} 单，GA4 purchase {number(current['ga4_purchases'])} 单；Shop/其他站外 {number(current['shopify_offsite_orders'])} 单已单列，先按 BigQuery transaction_id 逐单核验网页订单。",
         )
     return summary
 
@@ -946,6 +1007,7 @@ def build_markdown(data: dict[str, Any]) -> str:
 ## 12. 数据健康与口径
 
 - 收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions；整站 ROI = Shopify 收入 / Google Ads 总花费。
+- Shopify 与 GA4 purchase 的追踪完整性只比较 `source_name=web` 的 Online Store paid、非测试、未取消订单；Shop/POS/草稿单/其他站外订单单列，但仍保留在 Shopify 经营收入与订单中。
 - Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单；ROAS 使用广告转化价值 / 广告花费。
 - 落地页诊断来自最近 90 天 processed 数据，不代表仅本周页面表现；后续如需要更精确，可把 GA4 落地页事件按周拆分。
 - 所有转化率、CTR、加购率均以百分比展示。
@@ -1165,7 +1227,7 @@ def build_html(data: dict[str, Any]) -> str:
 
     <section>
       <h2>数据健康与口径</h2>
-      <p class="note">收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions；整站 ROI = Shopify 收入 / Google Ads 总花费。Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单。所有转化率、CTR、加购率均以百分比展示。周报日期按 GA4、Shopify、Google Ads、GSC 四源共同覆盖的最新 7 天对齐；上周对比期也要求四源覆盖。</p>
+      <p class="note">收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions；整站 ROI = Shopify 收入 / Google Ads 总花费。Shopify 与 GA4 purchase 的追踪完整性只比较 source_name=web 的 Online Store paid、非测试、未取消订单；Shop/POS/草稿单/其他站外订单单列，但仍保留在 Shopify 经营收入与订单中。Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单。所有转化率、CTR、加购率均以百分比展示。周报日期按 GA4、Shopify、Google Ads、GSC 四源共同覆盖的最新 7 天对齐；上周对比期也要求四源覆盖。</p>
       <h3>数据健康检查</h3>
       {data_health_html}
       <h3>四源覆盖检查</h3>

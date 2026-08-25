@@ -23,6 +23,26 @@ class WeeklyRoiTests(unittest.TestCase):
         shopify = pd.DataFrame(
             [{"parsed_date": report_date, "orders": 2, "total_sales": 300}]
         )
+        shopify_orders = pd.DataFrame(
+            [
+                {
+                    "parsed_date": report_date,
+                    "financial_status": "PAID",
+                    "test": False,
+                    "cancelled_at": "",
+                    "source_name": "web",
+                    "total_price": 150,
+                },
+                {
+                    "parsed_date": report_date,
+                    "financial_status": "PAID",
+                    "test": False,
+                    "cancelled_at": "",
+                    "source_name": "web",
+                    "total_price": 150,
+                },
+            ]
+        )
         ads = pd.DataFrame(
             [
                 {
@@ -46,7 +66,13 @@ class WeeklyRoiTests(unittest.TestCase):
         )
 
         summary = weekly.summarize_period(
-            ga4, shopify, ads, gsc, date(2026, 7, 13), date(2026, 7, 13)
+            ga4,
+            shopify_orders,
+            shopify,
+            ads,
+            gsc,
+            date(2026, 7, 13),
+            date(2026, 7, 13),
         )
 
         self.assertEqual(summary["site_roi"], 3.0)

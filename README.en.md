@@ -9,14 +9,14 @@ This skill helps Codex set up and customize a local data pipeline for ecommerce 
 ## What It Includes
 
 - GA4 fetch script for channel, landing page, and dated `add_to_cart` / `begin_checkout` funnel performance.
-- Google Search Console fetch script for query/page SEO data.
+- Google Search Console fetch script that separates property-level daily KPIs from query/page SEO detail, avoiding anonymous-query and page-aggregation undercounts.
 - Google Ads fetch script for campaign, ad group, search term, and landing page data.
-- Shopify Admin API fetch script with static-token or client-credentials authentication, plus a daily sales file that includes zero-order days.
+- Shopify Admin API fetch script with static-token or client-credentials authentication, GA4 Property timezone date alignment, paid/non-test/non-cancelled filtering, and a daily sales file that includes zero-order days.
 - Transform script that unifies raw source files into processed CSVs.
 - Weekly comparison report generator with current week vs previous week.
 - Operator-ready weekly report modules: business conclusions, revenue bridge, funnel health, Google Ads budget actions, page actions, SEO intent clusters, anomaly alerts, next-week owners, and data health checks.
 - Weekly funnel comparisons use dated GA4 add-to-cart and checkout events instead of a 90-day proxy total.
-- Purchase-integrity health compares aligned Shopify orders/revenue with GA4 purchases/revenue, escalates count gaps to transaction-level BigQuery reconciliation, and never auto-sends recovery events.
+- Purchase-integrity health compares only Online Store browser orders with GA4 purchases/revenue, reports Shop/POS/app/offsite orders separately while retaining them in Shopify business totals, escalates residual gaps to transaction-level BigQuery reconciliation, and never auto-sends recovery events.
 - Boss-facing HTML dashboard generator.
 - Configuration and data contract references.
 
@@ -48,7 +48,7 @@ Use $dtc-growth-data-report to install the growth reporting pipeline into this p
 
 Create `.env` from the included `.env.example` in your project. Required credentials depend on the sources you want to connect:
 
-- GA4: service account JSON path and GA4 property ID.
+- GA4: service account JSON path, GA4 property ID, and exact IANA Property timezone.
 - GSC: service account JSON path and Search Console property URL.
 - Google Ads: developer token, OAuth client ID/secret, refresh token, customer ID, and optional manager account ID.
 - Shopify: shop domain, API version, and either an Admin API access token or client ID/client secret.
@@ -60,6 +60,7 @@ Never commit `.env` or credential JSON files.
 The installed pipeline writes:
 
 - `data/raw/`: raw GA4, GSC, Google Ads, and Shopify CSV files.
+- `data/raw/gsc_daily_90d.csv`: property-level GSC daily totals used for weekly KPIs and coverage.
 - `data/raw/shopify_sales_by_day_90d.csv`: Shopify daily orders and revenue, including zero-order days, used to verify source coverage.
 - `data/processed/channel_performance.csv`
 - `data/processed/landing_page_performance.csv`
@@ -81,6 +82,8 @@ If one source is delayed, the report window moves back until all four sources al
 The weekly report is designed as an operating brief, not only a metric export. It translates source data into budget moves, page fixes, SEO priorities, owner-ready next actions, and tracking health checks.
 
 The top cards include sitewide ROI (`Shopify revenue / Google Ads spend`). The core KPI table includes GSC clicks alongside impressions and CTR.
+
+GSC sitewide KPIs come from the `date` + `byProperty` daily export; query/page rows are used only for SEO opportunities. Shopify business totals include all paid, non-test, non-cancelled orders, while GA4 purchase integrity compares only Online Store browser orders and reports offsite orders separately.
 
 ## Repository Topics
 

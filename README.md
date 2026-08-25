@@ -14,13 +14,13 @@
 ## 包含能力
 
 - GA4 数据拉取：渠道表现、落地页表现，以及带日期维度的 `add_to_cart` / `begin_checkout` 漏斗事件。
-- GSC 数据拉取：搜索词、页面、点击、曝光、CTR、平均排名。
+- GSC 数据拉取：站点级 `byProperty` 每日 KPI 与搜索词/页面明细分开抓取，避免匿名查询和页面聚合导致总量失真。
 - Google Ads 数据拉取：广告系列、广告组、搜索词、落地页、花费、点击、转化、转化价值；系列级总量覆盖 Performance Max。
-- Shopify 数据拉取：支持 Admin token 或 client-credentials 授权，拉取订单、收入、税费、订单状态、来源信息，并输出包含 0 订单日的每日销售表。
+- Shopify 数据拉取：支持 Admin token 或 client-credentials 授权，按 GA4 Property 时区归属订单日期，排除非 paid、测试和取消订单，并输出包含 0 订单日的每日销售表。
 - 数据统一转换：输出标准 processed CSV。
 - 周报模板：自动生成“本周 vs 上周”的老板版 HTML 和 Markdown 周报。
 - 操盘手增强周报：包含经营判断、收入归因、漏斗健康、广告预算动作、页面优化动作、SEO 意图分组、异常提醒、下周行动清单和数据健康检查。
-- Purchase 完整性告警：对比同一周 Shopify 订单/收入与 GA4 purchase/收入；出现单量差异时置顶提示并要求 BigQuery `transaction_id` 逐单核验，本技能不会自动补发事件。
+- Purchase 完整性告警：只用 Online Store 网页订单与 GA4 purchase 对账，Shop/POS/应用等站外订单单列但仍计入 Shopify 经营结果；残余差异要求 BigQuery `transaction_id` 逐单核验，本技能不会自动补发事件。
 - 周报漏斗按本周与上周分别统计加购和开始结账，不再用 90 天事件总量代替周度数据。
 - 独立站增长诊断看板：输出老板可读的本地 HTML dashboard。
 - 配置参考、数据字段说明和报告工作流说明。
@@ -57,6 +57,7 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 
 - `GOOGLE_APPLICATION_CREDENTIALS`：Google service account JSON 文件绝对路径。
 - `GA4_PROPERTY_ID`：GA4 property ID。
+- `GA4_PROPERTY_TIMEZONE`：GA4 Property 使用的 IANA 时区，例如 `America/Los_Angeles`。
 
 ### Google Search Console
 
@@ -88,6 +89,7 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 安装并运行管线后，默认生成：
 
 - `data/raw/`：GA4、GSC、Google Ads、Shopify 原始 CSV。
+- `data/raw/gsc_daily_90d.csv`：GSC 站点级每日点击、曝光、CTR 和平均排名，用于周报 KPI 与覆盖检查。
 - `data/raw/shopify_sales_by_day_90d.csv`：Shopify 每日订单和收入，包含 0 订单日，用于判断数据覆盖是否完整。
 - `data/processed/channel_performance.csv`
 - `data/processed/landing_page_performance.csv`
@@ -105,7 +107,8 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 - 收入和订单默认以 Shopify 为准。
 - 流量、落地页行为、站内事件默认以 GA4 为准。
 - 广告花费、点击、广告转化、转化价值、ROAS、CPA 默认以 Google Ads 为准。
-- SEO 点击、曝光、CTR、平均排名默认以 GSC 为准。
+- SEO 点击、曝光、CTR、平均排名以 GSC `byProperty` 站点级每日汇总为准；查询/页面明细只用于机会分析。
+- Shopify 经营收入/订单保留所有 paid、非测试、未取消订单；GA4 purchase 完整性只比较 Online Store 网页订单，站外订单单列。
 - 全站转化率 = Shopify 订单数 / GA4 Sessions。
 - 整站 ROI = Shopify 收入 / Google Ads 总花费，并显示在顶部经营卡片中。
 - 核心 KPI 表必须包含 GSC 点击数、曝光和 CTR。
