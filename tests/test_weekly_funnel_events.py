@@ -48,7 +48,20 @@ class WeeklyFunnelEventTests(unittest.TestCase):
         self.assertEqual(checkout["rate"], "50.00%")
 
         health = weekly.data_health_rows(
-            {"ad_value": 0, "revenue": 0, "orders": 0},
+            {
+                "ad_value": 0,
+                "revenue": 0,
+                "orders": 0,
+                "shopify_online_store_orders": 0,
+                "shopify_online_store_revenue": 0,
+                "shopify_offsite_orders": 0,
+                "shopify_offsite_revenue": 0,
+                "ga4_purchases": 0,
+                "ga4_purchase_revenue": 0,
+                "purchase_count_gap": 0,
+                "purchase_revenue_gap": 0,
+                "purchase_tracking_rate": 1,
+            },
             {"sources": {"GSC": {"last_date": "2026-07-13"}}},
             rows,
         )

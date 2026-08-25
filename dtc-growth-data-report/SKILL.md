@@ -72,13 +72,15 @@ When customizing reports:
 
 - Use Shopify as the default source of truth for revenue and orders.
 - Use GA4 for sessions, engagement, landing page behavior, and funnel events.
-- Compare aligned-period Shopify orders/revenue with GA4 `ecommercePurchases`/`totalRevenue` as a purchase-integrity health signal. Persist the count gap, revenue gap, and tracking rate in weekly JSON and show the result in data health.
+- Derive Shopify report dates in the GA4 Property IANA timezone; never truncate the UTC `createdAt` string into a report date.
+- Keep Shopify business totals as all paid, non-test, non-cancelled orders. For browser purchase integrity, compare only Online Store orders (`source_name=web`) with GA4 `ecommercePurchases`/`totalRevenue`; report Shop/POS/draft/app/offsite orders separately without removing them from business revenue or order KPIs.
+- Persist Online Store count/revenue, offsite count/revenue, residual purchase count/revenue gap, and tracking rate in weekly JSON and show the result in data health.
 - Treat an aggregate gap as an alert, not proof of a specific missing order. Require BigQuery `transaction_id` versus Shopify paid-order reconciliation before naming affected orders or handing recovery to `$ga4-data-analysis`.
 - Keep this reporting skill read-only. Never send Measurement Protocol events or repair tracking automatically.
 - Fetch GA4 `add_to_cart` and `begin_checkout` with the `date` dimension so weekly funnel stages use the same current and previous periods as the rest of the report.
 - Use Google Ads for spend, clicks, conversions, conversion value, ROAS, CPA, search terms, and ad landing URLs.
 - Use campaign-level daily Google Ads facts for totals and weekly campaign decisions so Performance Max is included; keep ad-group data only for compatible campaign detail.
-- Use GSC for SEO queries, pages, clicks, impressions, CTR, and average position.
+- Use GSC `date` + `byProperty` daily totals for sitewide clicks, impressions, CTR, position, and coverage. Keep the query/page/country/device export only for SEO detail because anonymous queries and page aggregation make its sums incomplete as property KPIs.
 - Show sitewide ROI as Shopify revenue divided by total Google Ads spend. Persist it in weekly JSON and show it in the top KPI cards with week-over-week change.
 - Include GSC clicks in the core KPI comparison table alongside impressions and CTR.
 - Render conversion rate, CTR, add-to-cart rate, and similar ratios as percentages.
@@ -96,11 +98,14 @@ Before final handoff:
 - Confirm required raw and processed files exist.
 - Confirm the weekly report period is aligned across GA4, Shopify, Google Ads, and GSC; do not accept a report window chosen from only some sources.
 - Confirm Shopify revenue/orders came from `shopify_sales_by_day_90d.csv` or an equivalent connector-materialized daily file, so zero-order days are distinguishable from missing Shopify data.
+- Confirm Shopify order dates use `GA4_PROPERTY_TIMEZONE`, daily totals exclude non-paid/test/cancelled orders, and order-level rows include `source_name` for Online Store/offsite purchase integrity.
+- Confirm order-level paid count/revenue reconciles to `shopify_sales_by_day_90d.csv` for both comparison weeks; fail closed on partial, stale, or mismatched Shopify raw data.
 - Confirm HTML/Markdown reports exist and are non-empty.
 - Confirm conversion rates and CTR are percentages, not decimals.
 - Confirm GA4 funnel rows compare dated `add_to_cart` and `begin_checkout` values for the current and previous aligned weeks.
-- Confirm the report compares Shopify orders with GA4 `ecommercePurchases`, leads with the risk when counts differ, and explicitly requires transaction-level reconciliation before recovery.
+- Confirm the report compares Shopify Online Store paid orders with GA4 `ecommercePurchases`, reports offsite orders separately, leads with the residual risk when counts differ, and explicitly requires transaction-level reconciliation before recovery.
 - Confirm Google Ads cost is in account currency units, not micros.
 - Confirm campaign-level Google Ads coverage includes Performance Max and that account totals are not derived only from `ad_group` rows.
 - Confirm sitewide ROI equals Shopify revenue divided by Google Ads spend, and GSC clicks appear in the core KPI table.
+- Confirm GSC sitewide KPIs and coverage come from `gsc_daily_90d.csv`, while query/page SEO opportunities come from `gsc_90d.csv`.
 - Confirm no secrets appear in outputs, logs, skill files, or final response.

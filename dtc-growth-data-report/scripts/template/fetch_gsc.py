@@ -23,6 +23,7 @@ COLUMNS = [
     "ctr",
     "position",
 ]
+DAILY_COLUMNS = ["date", "clicks", "impressions", "ctr", "position"]
 
 
 def fetch_gsc_rows(
@@ -31,22 +32,27 @@ def fetch_gsc_rows(
     start_date: str,
     end_date: str,
     row_limit: int = 25000,
+    dimensions: list[str] | None = None,
+    aggregation_type: str | None = None,
 ) -> list[dict]:
     credentials = service_account.Credentials.from_service_account_file(key_file, scopes=SCOPES)
     service = build("searchconsole", "v1", credentials=credentials, cache_discovery=False)
 
     rows: list[dict] = []
     start_row = 0
-    dimensions = ["date", "page", "query", "country", "device"]
+    dimensions = dimensions or ["date", "page", "query", "country", "device"]
 
     while True:
         body = {
             "startDate": start_date,
             "endDate": end_date,
             "dimensions": dimensions,
+            "type": "web",
             "rowLimit": row_limit,
             "startRow": start_row,
         }
+        if aggregation_type:
+            body["aggregationType"] = aggregation_type
         LOGGER.info("Fetching GSC rows startRow=%s", start_row)
         response = service.searchanalytics().query(siteUrl=site_url, body=body).execute()
         batch = response.get("rows", [])
@@ -82,6 +88,7 @@ def main() -> None:
     parser.add_argument("--start-date")
     parser.add_argument("--end-date")
     parser.add_argument("--out", default=str(DATA_RAW_DIR / "gsc_90d.csv"))
+    parser.add_argument("--daily-out", default=str(DATA_RAW_DIR / "gsc_daily_90d.csv"))
     args = parser.parse_args()
 
     ensure_dirs()
@@ -98,10 +105,31 @@ def main() -> None:
         start_date=start_date,
         end_date=end_date,
     )
+    daily_rows = fetch_gsc_rows(
+        key_file=settings["GOOGLE_APPLICATION_CREDENTIALS"],
+        site_url=settings["GSC_SITE_URL"],
+        start_date=start_date,
+        end_date=end_date,
+        dimensions=["date"],
+        aggregation_type="byProperty",
+    )
+    if not daily_rows:
+        raise RuntimeError("GSC site-level daily query returned no rows")
+
     output_path = Path(args.out)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows, columns=COLUMNS).to_csv(output_path, index=False)
+    daily_output_path = Path(args.daily_out)
+    daily_output_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(daily_rows, columns=DAILY_COLUMNS).to_csv(daily_output_path, index=False)
     LOGGER.info("GSC rows=%s date_range=%s..%s out=%s", len(rows), start_date, end_date, output_path)
+    LOGGER.info(
+        "GSC site-level daily rows=%s date_range=%s..%s out=%s",
+        len(daily_rows),
+        start_date,
+        end_date,
+        daily_output_path,
+    )
 
 
 if __name__ == "__main__":

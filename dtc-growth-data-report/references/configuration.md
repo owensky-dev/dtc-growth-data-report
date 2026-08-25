@@ -6,6 +6,7 @@ Use `.env` or local environment variables. Never hard-code credentials in script
 
 - `GOOGLE_APPLICATION_CREDENTIALS`: absolute path to a Google service account JSON file.
 - `GA4_PROPERTY_ID`: GA4 property ID.
+- `GA4_PROPERTY_TIMEZONE`: exact IANA timezone configured on the GA4 Property, such as `America/Los_Angeles`. Shopify `createdAt` timestamps are converted into this timezone before weekly date assignment.
 
 The service account must have access to the GA4 property.
 
@@ -36,7 +37,7 @@ Alternative:
 - Authentication option B: `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`; the fetcher exchanges them for a short-lived Admin API token.
 - `SHOPIFY_API_VERSION`: default to a current supported Admin API version.
 
-If a connector is used instead of an Admin token, materialize order-level data into `data/raw/shopify_orders_90d.csv` or `data/raw/shopify_sales_by_order_90d.csv` before transforming.
+If a connector is used instead of an Admin token, materialize the standard order-level contract into `data/raw/shopify_orders_90d.csv`, including local `date`, payment/test/cancellation status, `source_name`, and order value. Weekly purchase integrity requires these rows in addition to `shopify_sales_by_day_90d.csv`.
 
 ## Optional
 

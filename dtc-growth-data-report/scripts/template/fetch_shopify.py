@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -22,6 +23,8 @@ COLUMNS = [
     "total_tax",
     "financial_status",
     "fulfillment_status",
+    "test",
+    "cancelled_at",
     "source_name",
     "landing_site",
     "referring_site",
@@ -44,6 +47,8 @@ query Orders($first: Int!, $after: String, $query: String!) {
         createdAt
         displayFinancialStatus
         displayFulfillmentStatus
+        test
+        cancelledAt
         sourceName
         landingPageUrl
         referrerUrl
@@ -92,19 +97,29 @@ def money_amount(node: dict, field: str) -> float:
         return 0.0
 
 
+def local_order_date(created_at: str, report_timezone: str) -> str:
+    parsed = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(ZoneInfo(report_timezone)).date().isoformat()
+
+
 def fetch_orders(
     shop_domain: str,
     access_token: str,
     api_version: str,
     start_date: str,
     end_date: str,
+    report_timezone: str,
 ) -> list[dict]:
     endpoint = shopify_endpoint(shop_domain, api_version)
     headers = {
         "X-Shopify-Access-Token": access_token,
         "Content-Type": "application/json",
     }
-    query = f"created_at:>={start_date} created_at:<={end_date}"
+    query_start = (date.fromisoformat(start_date) - timedelta(days=2)).isoformat()
+    query_end = (date.fromisoformat(end_date) + timedelta(days=2)).isoformat()
+    query = f"created_at:>={query_start} created_at:<={query_end}"
     variables = {"first": 100, "after": None, "query": query}
     rows: list[dict] = []
 
@@ -125,7 +140,9 @@ def fetch_orders(
         for edge in orders.get("edges", []):
             node = edge.get("node", {})
             created_at = node.get("createdAt", "")
-            date_value = created_at[:10]
+            date_value = local_order_date(created_at, report_timezone)
+            if not start_date <= date_value <= end_date:
+                continue
             currency = (
                 node.get("currentTotalPriceSet", {})
                 .get("shopMoney", {})
@@ -143,6 +160,8 @@ def fetch_orders(
                     "total_tax": money_amount(node, "currentTotalTaxSet"),
                     "financial_status": node.get("displayFinancialStatus", ""),
                     "fulfillment_status": node.get("displayFulfillmentStatus", ""),
+                    "test": bool(node.get("test", False)),
+                    "cancelled_at": node.get("cancelledAt", "") or "",
                     "source_name": node.get("sourceName", ""),
                     "landing_site": node.get("landingPageUrl", ""),
                     "referring_site": node.get("referrerUrl", ""),
@@ -165,6 +184,14 @@ def build_daily_sales(rows: list[dict], start_date: str, end_date: str) -> pd.Da
         return daily[DAILY_COLUMNS]
 
     orders = pd.DataFrame(rows)
+    paid = orders["financial_status"].fillna("").astype(str).str.upper().eq("PAID")
+    non_test = pd.Series(True, index=orders.index)
+    not_cancelled = pd.Series(True, index=orders.index)
+    if "test" in orders.columns:
+        non_test &= ~orders["test"].fillna(False).astype(str).str.lower().isin({"true", "1", "yes"})
+    if "cancelled_at" in orders.columns:
+        not_cancelled &= orders["cancelled_at"].fillna("").astype(str).str.strip().eq("")
+    orders = orders[paid & non_test & not_cancelled].copy()
     orders["date"] = pd.to_datetime(orders["date"], errors="coerce").dt.strftime("%Y-%m-%d")
     orders["total_price"] = pd.to_numeric(orders["total_price"], errors="coerce").fillna(0)
     grouped = orders.groupby("date", dropna=False).agg(
@@ -184,11 +211,19 @@ def main() -> None:
     parser.add_argument("--end-date")
     parser.add_argument("--out", default=str(DATA_RAW_DIR / "shopify_orders_90d.csv"))
     parser.add_argument("--daily-out", default=str(DATA_RAW_DIR / "shopify_sales_by_day_90d.csv"))
+    parser.add_argument("--timezone")
     args = parser.parse_args()
 
     ensure_dirs()
     settings = load_settings(["SHOPIFY_SHOP_DOMAIN"])
     api_version = settings.get("SHOPIFY_API_VERSION", "2026-01")
+    report_timezone = args.timezone or settings.get("GA4_PROPERTY_TIMEZONE", "")
+    if not report_timezone:
+        raise RuntimeError(
+            "Missing GA4_PROPERTY_TIMEZONE. Set the GA4 Property IANA timezone "
+            "so Shopify orders align to the report date window."
+        )
+    ZoneInfo(report_timezone)
     start_date, end_date = (
         (args.start_date, args.end_date)
         if args.start_date and args.end_date
@@ -215,6 +250,7 @@ def main() -> None:
         api_version=api_version,
         start_date=start_date,
         end_date=end_date,
+        report_timezone=report_timezone,
     )
     output_path = Path(args.out)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -223,7 +259,14 @@ def main() -> None:
     daily_path.parent.mkdir(parents=True, exist_ok=True)
     daily_sales = build_daily_sales(rows, start_date, end_date)
     daily_sales.to_csv(daily_path, index=False)
-    LOGGER.info("Shopify rows=%s date_range=%s..%s out=%s", len(rows), start_date, end_date, output_path)
+    LOGGER.info(
+        "Shopify rows=%s date_range=%s..%s timezone=%s out=%s",
+        len(rows),
+        start_date,
+        end_date,
+        report_timezone,
+        output_path,
+    )
     LOGGER.info("Shopify daily rows=%s out=%s", len(daily_sales), daily_path)
 
 
