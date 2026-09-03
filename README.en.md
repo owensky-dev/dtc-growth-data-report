@@ -11,12 +11,12 @@ This skill helps Codex set up and customize a local data pipeline for ecommerce 
 - GA4 fetch script for channel, landing page, and dated `add_to_cart` / `begin_checkout` funnel performance.
 - Google Search Console fetch script that separates property-level daily KPIs from query/page SEO detail, avoiding anonymous-query and page-aggregation undercounts.
 - Google Ads fetch script for campaign, ad group, search term, and landing page data.
-- Shopify Admin API fetch script with static-token or client-credentials authentication, GA4 Property timezone date alignment, paid/non-test/non-cancelled filtering, and a daily sales file that includes zero-order days.
+- Shopify Admin API fetch script with static-token or client-credentials authentication, GA4 Property timezone alignment, original/current/refunded order amounts, paid/non-test/non-cancelled business filtering, and a daily sales file that includes zero-order days.
 - Transform script that unifies raw source files into processed CSVs.
 - Weekly comparison report generator with current week vs previous week.
 - Operator-ready weekly report modules: business conclusions, revenue bridge, funnel health, Google Ads budget actions, page actions, SEO intent clusters, anomaly alerts, next-week owners, and data health checks.
 - Weekly funnel comparisons use dated GA4 add-to-cart and checkout events instead of a 90-day proxy total.
-- Purchase-integrity health compares only Online Store browser orders with GA4 purchases/revenue, reports Shop/POS/app/offsite orders separately while retaining them in Shopify business totals, escalates residual gaps to transaction-level BigQuery reconciliation, and never auto-sends recovery events.
+- Purchase/refund integrity treats aggregate order ratios as alerts rather than tracking rates. With the canonical `$ga4-data-analysis` reconciliation JSON, it separately reports eligible-web purchase capture, current-paid coverage, refund-event coverage, duplicate/blank IDs, and the revenue bridge; Shop/POS/app/offsite orders remain outside the web denominator but inside business totals.
 - Boss-facing HTML dashboard generator.
 - Configuration and data contract references.
 
@@ -66,6 +66,7 @@ The installed pipeline writes:
 - `data/processed/landing_page_performance.csv`
 - `data/processed/google_ads_diagnosis.csv`
 - `data/processed/search_query_opportunities.csv`
+- `data/processed/purchase_reconciliation.json`: optional transaction-level contract; coverage rates are published only when period, Shopify snapshot, currency, and all BigQuery daily-table gates pass.
 - `reports/weekly_growth_diagnosis.md`
 - `outputs/weekly_growth_report_template.html`
 - `outputs/weekly_growth_report_template.md`
@@ -83,7 +84,7 @@ The weekly report is designed as an operating brief, not only a metric export. I
 
 The top cards include sitewide ROI (`Shopify revenue / Google Ads spend`). The core KPI table includes GSC clicks alongside impressions and CTR.
 
-GSC sitewide KPIs come from the `date` + `byProperty` daily export; query/page rows are used only for SEO opportunities. Shopify business totals include all paid, non-test, non-cancelled orders, while GA4 purchase integrity compares only Online Store browser orders and reports offsite orders separately.
+GSC sitewide KPIs come from the `date` + `byProperty` daily export; query/page rows are used only for SEO opportunities. Shopify business totals include all paid, non-test, non-cancelled orders, while offsite orders are reported separately. The aggregate current-paid/GA4 ratio is an alert, not a tracking rate. True purchase capture uses unique transaction IDs for eligible Online Store orders, including later-refunded orders; refund coverage is separate and is suppressed when reconciliation coverage is incomplete.
 
 ## Repository Topics
 

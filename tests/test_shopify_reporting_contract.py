@@ -68,6 +68,12 @@ class ShopifyReportingContractTests(unittest.TestCase):
         self.assertIn('settings.get("GA4_PROPERTY_TIMEZONE", "")', source)
         self.assertNotIn('settings.get("GA4_PROPERTY_TIMEZONE", "America/Juneau")', source)
 
+    def test_order_export_preserves_original_and_refunded_amounts(self) -> None:
+        self.assertIn("original_total_price", fetch_shopify.COLUMNS)
+        self.assertIn("total_refunded", fetch_shopify.COLUMNS)
+        self.assertIn("originalTotalPriceSet", fetch_shopify.ORDERS_QUERY)
+        self.assertIn("totalRefundedSet", fetch_shopify.ORDERS_QUERY)
+
 
 if __name__ == "__main__":
     unittest.main()

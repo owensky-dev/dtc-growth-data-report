@@ -14,6 +14,7 @@ from config import DATA_PROCESSED_DIR, DATA_RAW_DIR, PROJECT_ROOT, setup_logging
 
 LOGGER = setup_logging("generate_weekly_comparison_template")
 OUTPUTS_DIR = PROJECT_ROOT / "outputs"
+DEFAULT_PURCHASE_RECONCILIATION = DATA_PROCESSED_DIR / "purchase_reconciliation.json"
 REQUIRED_SOURCES = {
     "ga4": "GA4",
     "shopify_daily": "Shopify",
@@ -93,6 +94,85 @@ def delta_value(current: float, previous: float, is_rate: bool = False) -> dict[
 
 def safe_divide(numerator: float, denominator: float) -> float:
     return numerator / denominator if denominator else 0.0
+
+
+def load_purchase_reconciliation(path: Path | None) -> dict[str, Any] | None:
+    if path is None or not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != "1.0" or not isinstance(payload.get("reconciliation"), dict):
+        raise RuntimeError(f"Unsupported purchase reconciliation contract: {path}")
+    return payload
+
+
+def apply_purchase_reconciliation(
+    summary: dict[str, Any],
+    payload: dict[str, Any] | None,
+    start: date,
+    end: date,
+) -> None:
+    unavailable = {
+        "status": "not_run",
+        "publishable": False,
+        "purchase_capture_rate": None,
+        "current_paid_web_coverage_rate": None,
+        "refund_capture_rate": None,
+    }
+    if payload is None:
+        summary["purchase_reconciliation"] = unavailable
+        return
+
+    period = payload.get("period", {})
+    if period.get("start_date") != start.isoformat() or period.get("end_date") != end.isoformat():
+        summary["purchase_reconciliation"] = {
+            **unavailable,
+            "status": "period_mismatch",
+            "source_period": {
+                "start_date": period.get("start_date"),
+                "end_date": period.get("end_date"),
+            },
+        }
+        return
+
+    source_shopify = payload.get("shopify", {}).get("current_paid_web", {})
+    if (
+        abs(float(source_shopify.get("orders", -1)) - summary["shopify_online_store_orders"]) > 0.001
+        or abs(float(source_shopify.get("revenue", -1)) - summary["shopify_online_store_revenue"]) > 0.01
+    ):
+        summary["purchase_reconciliation"] = {
+            **unavailable,
+            "status": "shopify_snapshot_mismatch",
+        }
+        return
+
+    reconciliation = payload["reconciliation"]
+    purchase = reconciliation.get("purchase", {})
+    refund = reconciliation.get("refund", {})
+    amount_bridge = reconciliation.get("amount_bridge", {})
+    coverage_status = payload.get("coverage", {}).get("status", "unknown")
+    publishable = bool(reconciliation.get("publishable")) and coverage_status == "complete"
+    summary["purchase_reconciliation"] = {
+        "status": (
+            reconciliation.get("status", "unknown")
+            if publishable or coverage_status == "complete"
+            else "incomplete_bigquery_coverage"
+        ),
+        "publishable": publishable,
+        "coverage_status": coverage_status,
+        "eligible_web_transactions": float(purchase.get("eligible_web_transactions", 0)),
+        "matched_web_transactions": float(purchase.get("matched_web_transactions", 0)),
+        "missing_web_transactions": float(purchase.get("missing_web_transactions", 0)),
+        "ga4_only_transactions": float(purchase.get("ga4_only_transactions", 0)),
+        "purchase_capture_rate": purchase.get("capture_rate") if publishable else None,
+        "current_paid_web_coverage_rate": purchase.get("current_paid_web_coverage_rate") if publishable else None,
+        "refund_expected_transactions": float(refund.get("expected_transactions", 0)),
+        "refund_matched_transactions": float(refund.get("matched_transactions", 0)),
+        "refund_missing_transactions": float(refund.get("missing_transactions", 0)),
+        "refund_capture_rate": refund.get("capture_rate") if publishable else None,
+        "duplicate_purchase_transaction_ids": len(payload.get("ga4", {}).get("purchase", {}).get("duplicate_transaction_ids", [])),
+        "blank_purchase_transaction_id_events": float(payload.get("ga4", {}).get("purchase", {}).get("blank_transaction_id_events", 0)),
+        "amount_bridge": amount_bridge,
+    }
 
 
 def period_filter(frame: pd.DataFrame, date_col: str, start: date, end: date) -> pd.DataFrame:
@@ -179,7 +259,7 @@ def summarize_period(
     gsc: pd.DataFrame,
     start: date,
     end: date,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     ga4_week = period_filter(ga4, "parsed_date", start, end)
     shopify_orders_week = period_filter(shopify_orders, "parsed_date", start, end)
     shopify_week = period_filter(shopify_daily, "parsed_date", start, end)
@@ -249,9 +329,9 @@ def summarize_period(
         "shopify_online_store_revenue": online_store_revenue,
         "shopify_offsite_orders": offsite_order_count,
         "shopify_offsite_revenue": offsite_revenue,
-        "purchase_count_gap": online_store_order_count - ga4_purchases,
-        "purchase_revenue_gap": online_store_revenue - ga4_purchase_revenue,
-        "purchase_tracking_rate": safe_divide(ga4_purchases, online_store_order_count) if online_store_order_count else (1.0 if ga4_purchases == 0 else 0.0),
+        "aggregate_purchase_count_gap": online_store_order_count - ga4_purchases,
+        "aggregate_purchase_revenue_gap": online_store_revenue - ga4_purchase_revenue,
+        "aggregate_purchase_ratio": safe_divide(ga4_purchases, online_store_order_count) if online_store_order_count else (1.0 if ga4_purchases == 0 else 0.0),
         "sessions": sessions,
         "conversion_rate": safe_divide(orders, sessions),
         "aov": safe_divide(revenue, orders),
@@ -688,26 +768,46 @@ def anomaly_rows(current: dict[str, float], previous: dict[str, float]) -> list[
     return rows
 
 
-def data_health_rows(current: dict[str, float], coverage: dict[str, Any], funnel: list[dict[str, str]]) -> list[dict[str, str]]:
+def data_health_rows(current: dict[str, Any], coverage: dict[str, Any], funnel: list[dict[str, str]]) -> list[dict[str, str]]:
     ads_vs_shopify_gap = current["ad_value"] - current["revenue"]
-    purchase_count_gap = current.get("purchase_count_gap", 0.0)
-    purchase_revenue_gap = current.get("purchase_revenue_gap", 0.0)
-    purchase_tracking_rate = current.get("purchase_tracking_rate", 0.0)
+    purchase_count_gap = current.get("aggregate_purchase_count_gap", 0.0)
+    purchase_revenue_gap = current.get("aggregate_purchase_revenue_gap", 0.0)
+    aggregate_purchase_ratio = current.get("aggregate_purchase_ratio", 0.0)
     ga4_purchases = current.get("ga4_purchases", 0.0)
     ga4_purchase_revenue = current.get("ga4_purchase_revenue", 0.0)
+    reconciliation = current.get("purchase_reconciliation", {})
     has_dated_funnel = any(row.get("metric") == "GA4 开始结账" for row in funnel)
-    if purchase_count_gap > 0:
-        purchase_status = "高风险"
-        purchase_gap_text = f"GA4 比 Shopify Online Store 少 {number(purchase_count_gap)} 单"
-    elif purchase_count_gap < 0:
-        purchase_status = "异常"
-        purchase_gap_text = f"GA4 比 Shopify Online Store 多 {number(abs(purchase_count_gap))} 单"
-    elif abs(purchase_revenue_gap) > 0.01:
-        purchase_status = "异常"
-        purchase_gap_text = "订单数一致但收入不一致"
+    if reconciliation.get("publishable"):
+        missing = reconciliation.get("missing_web_transactions", 0.0)
+        ga4_only = reconciliation.get("ga4_only_transactions", 0.0)
+        refund_missing = reconciliation.get("refund_missing_transactions", 0.0)
+        duplicates = reconciliation.get("duplicate_purchase_transaction_ids", 0)
+        blanks = reconciliation.get("blank_purchase_transaction_id_events", 0.0)
+        bridge = reconciliation.get("amount_bridge", {})
+        purchase_status = "高风险" if missing or refund_missing else ("异常" if ga4_only or duplicates or blanks else "通过")
+        purchase_detail = (
+            f"BigQuery transaction_id 已核验：网页 purchase 捕获 "
+            f"{number(reconciliation.get('matched_web_transactions', 0))}/"
+            f"{number(reconciliation.get('eligible_web_transactions', 0))}，"
+            f"捕获率 {pct(float(reconciliation['purchase_capture_rate']))}；"
+            f"漏记 {number(missing)} 单，GA4-only {number(ga4_only)} 单。"
+            f"退款回传 {number(reconciliation.get('refund_matched_transactions', 0))}/"
+            f"{number(reconciliation.get('refund_expected_transactions', 0))}，"
+            f"缺失 {number(refund_missing)} 单。"
+            f"聚合收入差 {money(float(bridge.get('aggregate_revenue_gap', 0)))}，"
+            f"其中 Shopify-only {money(float(bridge.get('current_paid_shopify_only_revenue', 0)))}、"
+            f"GA4 中非当前 paid {money(float(bridge.get('ga4_not_current_paid_revenue', 0)))}，"
+            f"未解释差额 {money(float(bridge.get('unexplained_revenue_gap', 0)))}。"
+        )
     else:
-        purchase_status = "通过"
-        purchase_gap_text = "订单数一致"
+        purchase_status = "待核对" if purchase_count_gap or abs(purchase_revenue_gap) > 0.01 else "观察"
+        purchase_detail = (
+            f"仅聚合告警：Shopify Online Store {number(current['shopify_online_store_orders'])} 单 / "
+            f"{money(current['shopify_online_store_revenue'])}，GA4 purchase {number(ga4_purchases)} 单 / "
+            f"{money(ga4_purchase_revenue)}；聚合数量比 {pct(aggregate_purchase_ratio)}，"
+            f"订单差 {number(purchase_count_gap)}，收入差 {money(purchase_revenue_gap)}。"
+            f"该比值不是追踪率；逐单结果不可用（{reconciliation.get('status', 'not_run')}）。"
+        )
     rows = [
         {
             "check": "四源周期",
@@ -724,12 +824,9 @@ def data_health_rows(current: dict[str, float], coverage: dict[str, Any], funnel
             "status": purchase_status,
             "detail": (
                 f"Shopify 全渠道 {number(current['orders'])} 单 / {money(current['revenue'])}；"
-                f"其中 Online Store {number(current['shopify_online_store_orders'])} 单 / {money(current['shopify_online_store_revenue'])} 纳入网页 GA4 对账，"
+                f"其中 Online Store 当前 paid {number(current['shopify_online_store_orders'])} 单 / {money(current['shopify_online_store_revenue'])}，"
                 f"Shop/其他站外 {number(current['shopify_offsite_orders'])} 单 / {money(current['shopify_offsite_revenue'])} 单列；"
-                f"GA4 purchase {number(ga4_purchases)} 单 / {money(ga4_purchase_revenue)}；"
-                f"追踪率 {pct(purchase_tracking_rate)}，订单差 {number(purchase_count_gap)}，"
-                f"收入差 {money(purchase_revenue_gap)}；{purchase_gap_text}。"
-                "聚合差异只用于告警，需用 BigQuery transaction_id 对账后确认。"
+                f"{purchase_detail}"
             ),
         },
         {
@@ -754,13 +851,34 @@ def next_action_rows(data: dict[str, Any]) -> list[dict[str, str]]:
     top_page = pages[0] if pages else None
     top_seo = seo[0] if seo else None
     rows = []
-    if data.get("current", {}).get("purchase_count_gap", 0) != 0:
+    current = data.get("current", {})
+    reconciliation = current.get("purchase_reconciliation", {})
+    exact_exceptions = (
+        reconciliation.get("missing_web_transactions", 0)
+        or reconciliation.get("ga4_only_transactions", 0)
+        or reconciliation.get("refund_missing_transactions", 0)
+        or reconciliation.get("duplicate_purchase_transaction_ids", 0)
+        or reconciliation.get("blank_purchase_transaction_id_events", 0)
+    )
+    aggregate_alert = (
+        current.get("aggregate_purchase_count_gap", 0) != 0
+        or abs(current.get("aggregate_purchase_revenue_gap", 0)) > 0.01
+    )
+    if reconciliation.get("publishable") and exact_exceptions:
+        rows.append({
+            "priority": "P0",
+            "task": "处理已确认的 GA4 purchase/refund 逐单异常",
+            "owner": "数据/追踪",
+            "target": "消除 transaction_id 漏记、重复和退款缺口",
+            "done": "修复后重新跑完整日表对账；本报告流程保持只读，补发仅交给受控 GA4 recovery 流程。",
+        })
+    elif aggregate_alert:
         rows.append({
             "priority": "P0",
             "task": "核对 Shopify Online Store paid order 与 GA4 BigQuery transaction_id",
             "owner": "数据/追踪",
-            "target": "确认网页订单的 GA4 purchase 数量差异和收入影响",
-            "done": "完成逐单核验；不在本报告流程自动补发，需交给受控 GA4 recovery 流程。",
+            "target": "把聚合告警拆成漏记 purchase、GA4-only、退款未回传和金额差",
+            "done": "完整日表覆盖且逐单 JSON 与本周 Shopify 快照一致；未完成前不发布追踪率。",
         })
     if top_budget:
         rows.append({"priority": "P0", "task": f"{top_budget['action']}：{top_budget['campaign']} / {top_budget['ad_group']}", "owner": "投放", "target": "降低无效花费，观察 CPA/ROAS", "done": "预算动作完成并在 3 天后复盘。"})
@@ -838,12 +956,18 @@ def load_sources() -> dict[str, pd.DataFrame]:
     return {"ga4": ga4, "shopify": shopify, "shopify_daily": shopify_daily, "ads": ads, "gsc": gsc, "gsc_detail": gsc_detail, "ga4_events": ga4_events, "landing": landing}
 
 
-def build_report_data() -> dict[str, Any]:
+def build_report_data(purchase_reconciliation_path: Path | None = DEFAULT_PURCHASE_RECONCILIATION) -> dict[str, Any]:
     sources = load_sources()
     current_start, end, previous_start, previous_end, coverage = latest_aligned_period(sources)
 
     current = summarize_period(sources["ga4"], sources["shopify"], sources["shopify_daily"], sources["ads"], sources["gsc"], current_start, end)
     previous = summarize_period(sources["ga4"], sources["shopify"], sources["shopify_daily"], sources["ads"], sources["gsc"], previous_start, previous_end)
+    apply_purchase_reconciliation(
+        current,
+        load_purchase_reconciliation(purchase_reconciliation_path),
+        current_start,
+        end,
+    )
     low_ctr, rank_opportunities = seo_rows(sources["gsc_detail"], current_start, end)
     operator_rows = operator_conclusions(current, previous)
 
@@ -900,10 +1024,29 @@ def build_summary(data: dict[str, Any]) -> list[str]:
         f"GSC 本周曝光 {number(current['seo_impressions'])}、点击 {number(current['seo_clicks'])}，CTR {pct(current['seo_ctr'])}，较上周 {seo_ctr_delta}。",
         f"下周第一动作：{top_action}",
     ]
-    if current.get("purchase_count_gap", 0) != 0:
+    reconciliation = current.get("purchase_reconciliation", {})
+    if reconciliation.get("publishable") and (
+        reconciliation.get("missing_web_transactions", 0)
+        or reconciliation.get("refund_missing_transactions", 0)
+        or reconciliation.get("ga4_only_transactions", 0)
+    ):
         summary.insert(
             0,
-            f"数据风险：Shopify Online Store {number(current['shopify_online_store_orders'])} 单，GA4 purchase {number(current['ga4_purchases'])} 单；Shop/其他站外 {number(current['shopify_offsite_orders'])} 单已单列，先按 BigQuery transaction_id 逐单核验网页订单。",
+            f"数据风险（已逐单核验）：网页 purchase 捕获 "
+            f"{number(reconciliation.get('matched_web_transactions', 0))}/"
+            f"{number(reconciliation.get('eligible_web_transactions', 0))}，"
+            f"漏记 {number(reconciliation.get('missing_web_transactions', 0))} 单；"
+            f"退款未回传 {number(reconciliation.get('refund_missing_transactions', 0))} 单。",
+        )
+    elif (
+        current.get("aggregate_purchase_count_gap", 0) != 0
+        or abs(current.get("aggregate_purchase_revenue_gap", 0)) > 0.01
+    ):
+        summary.insert(
+            0,
+            f"数据告警（尚未逐单核验）：Shopify Online Store 当前 paid "
+            f"{number(current['shopify_online_store_orders'])} 单，GA4 purchase {number(current['ga4_purchases'])}；"
+            "聚合差异不能作为追踪率，需先完成 BigQuery transaction_id 对账。",
         )
     return summary
 
@@ -1007,7 +1150,8 @@ def build_markdown(data: dict[str, Any]) -> str:
 ## 12. 数据健康与口径
 
 - 收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions；整站 ROI = Shopify 收入 / Google Ads 总花费。
-- Shopify 与 GA4 purchase 的追踪完整性只比较 `source_name=web` 的 Online Store paid、非测试、未取消订单；Shop/POS/草稿单/其他站外订单单列，但仍保留在 Shopify 经营收入与订单中。
+- Shopify 与 GA4 的聚合订单比只用于告警，不叫“追踪率”。真正的 purchase 捕获率必须用完整 BigQuery 日表的唯一 `transaction_id` 对 Shopify `source_name=web` 的已付款及后续退款订单逐单计算；退款事件另算覆盖率。
+- Shop/POS/草稿单/其他站外订单单列，但仍保留在 Shopify 经营收入与订单中。若对账周期、Shopify 快照或 BigQuery 日表覆盖不完整，周报不发布 purchase/refund 覆盖率。
 - Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单；ROAS 使用广告转化价值 / 广告花费。
 - 落地页诊断来自最近 90 天 processed 数据，不代表仅本周页面表现；后续如需要更精确，可把 GA4 落地页事件按周拆分。
 - 所有转化率、CTR、加购率均以百分比展示。
@@ -1227,7 +1371,7 @@ def build_html(data: dict[str, Any]) -> str:
 
     <section>
       <h2>数据健康与口径</h2>
-      <p class="note">收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions；整站 ROI = Shopify 收入 / Google Ads 总花费。Shopify 与 GA4 purchase 的追踪完整性只比较 source_name=web 的 Online Store paid、非测试、未取消订单；Shop/POS/草稿单/其他站外订单单列，但仍保留在 Shopify 经营收入与订单中。Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单。所有转化率、CTR、加购率均以百分比展示。周报日期按 GA4、Shopify、Google Ads、GSC 四源共同覆盖的最新 7 天对齐；上周对比期也要求四源覆盖。</p>
+      <p class="note">收入和订单使用 Shopify 真实订单口径；流量使用 GA4 Sessions；转化率 = Shopify 订单 / GA4 Sessions；整站 ROI = Shopify 收入 / Google Ads 总花费。Shopify 与 GA4 的聚合订单比只用于告警，不叫“追踪率”。真正的 purchase 捕获率必须用完整 BigQuery 日表的唯一 transaction_id，对 Shopify source_name=web 的已付款及后续退款订单逐单计算；退款事件另算覆盖率。Shop/POS/草稿单/其他站外订单单列，但仍保留在 Shopify 经营收入与订单中。若对账周期、Shopify 快照或 BigQuery 日表覆盖不完整，周报不发布 purchase/refund 覆盖率。Google Ads 的转化是广告平台转化事件，不一定等同于 Shopify 订单。所有转化率、CTR、加购率均以百分比展示。周报日期按 GA4、Shopify、Google Ads、GSC 四源共同覆盖的最新 7 天对齐；上周对比期也要求四源覆盖。</p>
       <h3>数据健康检查</h3>
       {data_health_html}
       <h3>四源覆盖检查</h3>
@@ -1257,9 +1401,14 @@ def main() -> None:
     parser.add_argument("--markdown-out", default=str(OUTPUTS_DIR / "weekly_growth_report_template.md"))
     parser.add_argument("--html-out", default=str(OUTPUTS_DIR / "weekly_growth_report_template.html"))
     parser.add_argument("--json-out", default=str(OUTPUTS_DIR / "weekly_growth_report_template.json"))
+    parser.add_argument(
+        "--purchase-reconciliation",
+        default=str(DEFAULT_PURCHASE_RECONCILIATION),
+        help="Canonical JSON produced by $ga4-data-analysis reconcile_shopify_ga4.js.",
+    )
     args = parser.parse_args()
 
-    data = build_report_data()
+    data = build_report_data(Path(args.purchase_reconciliation))
     write_outputs(data, Path(args.markdown_out), Path(args.html_out), Path(args.json_out))
 
 

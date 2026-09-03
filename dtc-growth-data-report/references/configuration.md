@@ -37,7 +37,9 @@ Alternative:
 - Authentication option B: `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`; the fetcher exchanges them for a short-lived Admin API token.
 - `SHOPIFY_API_VERSION`: default to a current supported Admin API version.
 
-If a connector is used instead of an Admin token, materialize the standard order-level contract into `data/raw/shopify_orders_90d.csv`, including local `date`, payment/test/cancellation status, `source_name`, and order value. Weekly purchase integrity requires these rows in addition to `shopify_sales_by_day_90d.csv`.
+If a connector is used instead of an Admin token, materialize the standard order-level contract into `data/raw/shopify_orders_90d.csv`, including local `date`, payment/test/cancellation status, `source_name`, `order_id`, `total_price`, `original_total_price`, and `total_refunded`. Weekly/monthly purchase integrity requires these rows in addition to `shopify_sales_by_day_90d.csv`.
+
+Exact purchase/refund rates also require GA4 BigQuery Export access through `$ga4-data-analysis`: project ID, GA4 dataset-level Data Viewer, project-level Job User, the same service-account key, and complete `events_YYYYMMDD` tables for the report window. The DTC report remains read-only and only consumes the generated reconciliation JSON.
 
 ## Optional
 

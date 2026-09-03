@@ -29,7 +29,16 @@ Required sections:
 - Top KPI cards: Shopify revenue, orders, store conversion rate, sitewide ROI (`Shopify revenue / Google Ads spend`), and Google Ads ROAS.
 - Revenue bridge: split revenue movement into traffic, conversion rate, and AOV effects.
 - Funnel health: show GA4 Sessions, dated `add_to_cart`, dated `begin_checkout`, Shopify purchases, and ad click-to-conversion efficiency. Compare GA4 funnel events for the current and previous aligned weeks; do not substitute a 90-day event total when dated data is available.
-- Data health: compare Shopify Online Store (`source_name=web`) paid-order count/revenue with GA4 `ecommercePurchases`/`totalRevenue` for the same aligned week. Show Shop/POS/draft/app/offsite orders separately while retaining them in Shopify business totals. Put the residual Online Store count gap in the Executive Summary and P0 actions, but do not identify or repair orders until BigQuery `transaction_id` reconciliation confirms them. Hand authorized recovery to `$ga4-data-analysis`; this report remains read-only.
+- Data health: compare Shopify Online Store (`source_name=web`) current-paid count/revenue with GA4 aggregates for the same aligned week as an alert only. Never label that aggregate ratio a tracking rate.
+- When `data/processed/purchase_reconciliation.json` exists, require exact period equality, complete BigQuery daily tables, a matching Shopify snapshot, and `reconciliation.publishable=true`. Then show unique-ID purchase capture for the eligible web cohort, current-paid web coverage, refund coverage, Shopify-only/GA4-only/duplicate/blank exceptions, and the amount bridge. Suppress rates when a gate fails.
+- Show Shop/POS/draft/app/offsite orders separately while retaining them in Shopify business totals. Put verified transaction exceptions in the Executive Summary and P0 actions; when exact reconciliation is unavailable, label the aggregate issue unverified. Hand authorized recovery to `$ga4-data-analysis`; this report remains read-only.
+
+## Monthly Report Purchase Integrity
+
+- Use the same canonical reconciliation contract for the full calendar month. Require every daily `events_YYYYMMDD` table in the month before publishing purchase/refund coverage rates.
+- Keep Shopify monthly business sales/ROI independent from tracking health. Show three separate lines: Shopify business result, web purchase capture, and refund-event coverage.
+- Include an amount bridge when aggregate Shopify/GA4 revenue differs. Never let a refunded GA4 purchase offset missing paid purchases without disclosure.
+- If month-end BigQuery export is incomplete, generate the business report only if the four core sources are otherwise complete, mark transaction integrity pending, and rerun the reconciliation after the missing daily table arrives.
 - Daily Google Ads spend and weekly spend total
 - Core KPI table: current week, previous week, and change, including GSC clicks alongside impressions and CTR.
 - Channel traffic changes

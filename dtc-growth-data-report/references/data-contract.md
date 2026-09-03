@@ -26,7 +26,7 @@ The standard pipeline writes raw source files to `data/raw/`.
 
 ### Shopify
 
-- `shopify_orders_90d.csv`: `created_at`, `date`, `order_id`, `order_name`, `currency`, `subtotal_price`, `total_price`, `total_tax`, `financial_status`, `fulfillment_status`, `test`, `cancelled_at`, `source_name`, `landing_site`, `referring_site`. `date` is derived by converting `created_at` into `GA4_PROPERTY_TIMEZONE`.
+- `shopify_orders_90d.csv`: `created_at`, `date`, `order_id`, `order_name`, `currency`, `subtotal_price`, `total_price`, `original_total_price`, `total_refunded`, `total_tax`, `financial_status`, `fulfillment_status`, `test`, `cancelled_at`, `source_name`, `landing_site`, `referring_site`. `date` is derived by converting `created_at` into `GA4_PROPERTY_TIMEZONE`. Original price and refunded amount are required to separate purchase capture from later refund tracking.
 - `shopify_sales_by_day_90d.csv`: `date`, `orders`, `total_sales`. It includes zero-order days and aggregates only paid, non-test, non-cancelled orders. This file is required for weekly reports because it distinguishes "no orders" from "Shopify data was not fetched."
 - For each weekly comparison window, the paid/non-test/non-cancelled count and `total_price` sum from `shopify_orders_90d.csv` must reconcile to `orders` and `total_sales` in `shopify_sales_by_day_90d.csv` (revenue tolerance `0.01`). A mismatch indicates partial or stale Shopify raw data and must stop report generation.
 - Optional connector materialization: `shopify_sales_by_order_90d.csv`, `shopify_sales_by_product_90d.csv`
@@ -50,6 +50,7 @@ The transform step should produce:
 - `data/processed/landing_page_performance.csv`
 - `data/processed/google_ads_diagnosis.csv`
 - `data/processed/search_query_opportunities.csv`
+- `data/processed/purchase_reconciliation.json`: optional canonical read-only output from `$ga4-data-analysis/scripts/reconcile_shopify_ga4.js`. It must use schema version `1.0`, match the exact report period and Shopify snapshot, and expose BigQuery daily-table coverage, unique-ID purchase capture, current-paid coverage, refund coverage, duplicate/blank IDs, exceptions, and an amount bridge.
 
 ## Metric Defaults
 
@@ -59,8 +60,12 @@ The transform step should produce:
 - SEO impressions, clicks, CTR, average position: GSC property-level daily totals from `gsc_daily_90d.csv`.
 - Store conversion rate: Shopify orders divided by GA4 sessions.
 - Sitewide ROI: Shopify revenue divided by total Google Ads cost for the same aligned period.
-- Purchase tracking rate: GA4 `ecommercePurchases` divided by Shopify Online Store paid, non-test, non-cancelled orders (`source_name=web`) for the same aligned period. When both are zero, report 100% coverage rather than a divide-by-zero error.
-- Purchase count gap: Shopify Online Store orders minus GA4 `ecommercePurchases`. Purchase revenue gap: Shopify Online Store revenue minus GA4 `totalRevenue`. Persist Shop/POS/draft/app/offsite counts and revenue separately; they remain in Shopify business KPIs but are not treated as browser tracking failures. These aggregate fields are health signals only; exact missing orders require Shopify paid-order IDs versus BigQuery `transaction_id` reconciliation.
+- Aggregate purchase ratio: GA4 `ecommercePurchases` divided by Shopify current-paid Online Store orders for the same aligned period. It is a health signal only and must never be labelled purchase tracking/capture rate.
+- Aggregate purchase count gap: Shopify current-paid Online Store orders minus GA4 `ecommercePurchases`. Aggregate purchase revenue gap: Shopify current-paid Online Store revenue minus GA4 aggregate revenue. Persist Shop/POS/draft/app/offsite counts and revenue separately; they remain in Shopify business KPIs but are not treated as browser tracking failures.
+- Purchase capture rate: matched unique GA4 purchase `transaction_id` values divided by eligible non-test, non-cancelled Online Store orders with `PAID`, `PARTIALLY_REFUNDED`, or `REFUNDED` status. Publish only from a canonical reconciliation with complete daily BigQuery tables; otherwise use `null`/`n/a`.
+- Current-paid web coverage: matched unique GA4 purchase IDs divided by current `PAID` Online Store orders. Keep this secondary diagnostic separate from the purchase capture rate.
+- Refund coverage: matched GA4 refund transaction IDs divided by Shopify Online Store orders that are partially/fully refunded or have `total_refunded > 0`. Report it separately from purchase capture.
+- A count or revenue match does not prove ID parity. Exact health must also report Shopify-only purchase IDs, GA4-only IDs, duplicate and blank IDs, expected/missing refunds, and the explained/unexplained revenue bridge.
 - Add-to-cart rate: GA4 `add_to_cart` events divided by GA4 sessions for the same report period.
 - Cart-to-checkout rate: GA4 `begin_checkout` events divided by GA4 `add_to_cart` events for the same report period.
 - ROAS: Google Ads conversion value divided by Google Ads cost.

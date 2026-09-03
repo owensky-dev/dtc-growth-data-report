@@ -16,11 +16,11 @@
 - GA4 数据拉取：渠道表现、落地页表现，以及带日期维度的 `add_to_cart` / `begin_checkout` 漏斗事件。
 - GSC 数据拉取：站点级 `byProperty` 每日 KPI 与搜索词/页面明细分开抓取，避免匿名查询和页面聚合导致总量失真。
 - Google Ads 数据拉取：广告系列、广告组、搜索词、落地页、花费、点击、转化、转化价值；系列级总量覆盖 Performance Max。
-- Shopify 数据拉取：支持 Admin token 或 client-credentials 授权，按 GA4 Property 时区归属订单日期，排除非 paid、测试和取消订单，并输出包含 0 订单日的每日销售表。
+- Shopify 数据拉取：支持 Admin token 或 client-credentials 授权，按 GA4 Property 时区归属订单日期，并保留订单原始金额、当前金额和退款金额；经营汇总排除非 paid、测试和取消订单，并输出包含 0 订单日的每日销售表。
 - 数据统一转换：输出标准 processed CSV。
 - 周报模板：自动生成“本周 vs 上周”的老板版 HTML 和 Markdown 周报。
 - 操盘手增强周报：包含经营判断、收入归因、漏斗健康、广告预算动作、页面优化动作、SEO 意图分组、异常提醒、下周行动清单和数据健康检查。
-- Purchase 完整性告警：只用 Online Store 网页订单与 GA4 purchase 对账，Shop/POS/应用等站外订单单列但仍计入 Shopify 经营结果；残余差异要求 BigQuery `transaction_id` 逐单核验，本技能不会自动补发事件。
+- Purchase/refund 完整性：聚合订单比只作告警，不再冒充追踪率。读取 `$ga4-data-analysis` 的标准逐单 JSON 后，分别展示网页 purchase 捕获率、当前 paid 覆盖率、退款回传覆盖率、重复/空 ID 与收入差额桥接；Shop/POS/应用等站外订单单列但仍计入 Shopify 经营结果。
 - 周报漏斗按本周与上周分别统计加购和开始结账，不再用 90 天事件总量代替周度数据。
 - 独立站增长诊断看板：输出老板可读的本地 HTML dashboard。
 - 配置参考、数据字段说明和报告工作流说明。
@@ -95,6 +95,7 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 - `data/processed/landing_page_performance.csv`
 - `data/processed/google_ads_diagnosis.csv`
 - `data/processed/search_query_opportunities.csv`
+- `data/processed/purchase_reconciliation.json`：可选逐单对账产物；只有周期、Shopify 快照、币种和 BigQuery 每日日表覆盖全部通过时才发布 purchase/refund 覆盖率。
 - `reports/weekly_growth_diagnosis.md`
 - `outputs/weekly_growth_report_template.html`
 - `outputs/weekly_growth_report_template.md`
@@ -108,7 +109,8 @@ cp -R dtc-growth-data-report ~/.codex/skills/
 - 流量、落地页行为、站内事件默认以 GA4 为准。
 - 广告花费、点击、广告转化、转化价值、ROAS、CPA 默认以 Google Ads 系列级每日数据为准，不能仅依赖会漏掉 Performance Max 的广告组数据。
 - SEO 点击、曝光、CTR、平均排名以 GSC `byProperty` 站点级每日汇总为准；查询/页面明细只用于机会分析。
-- Shopify 经营收入/订单保留所有 paid、非测试、未取消订单；GA4 purchase 完整性只比较 Online Store 网页订单，站外订单单列。
+- Shopify 经营收入/订单保留所有 paid、非测试、未取消订单；站外订单单列。Shopify current-paid 与 GA4 purchase 的聚合比只用于告警，不能命名为追踪率。
+- 真正的 purchase 捕获率按唯一 `transaction_id` 计算，分母包含后来部分/全额退款的 Online Store 有效订单；退款事件另算覆盖率。若 BigQuery 日表、报告周期、Shopify 快照或币种不完整，则显示 `n/a`，不猜测。
 - 全站转化率 = Shopify 订单数 / GA4 Sessions。
 - 整站 ROI = Shopify 收入 / Google Ads 总花费，并显示在顶部经营卡片中。
 - 核心 KPI 表必须包含 GSC 点击数、曝光和 CTR。

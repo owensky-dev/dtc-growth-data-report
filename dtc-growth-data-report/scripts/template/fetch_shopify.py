@@ -20,6 +20,8 @@ COLUMNS = [
     "currency",
     "subtotal_price",
     "total_price",
+    "original_total_price",
+    "total_refunded",
     "total_tax",
     "financial_status",
     "fulfillment_status",
@@ -54,6 +56,8 @@ query Orders($first: Int!, $after: String, $query: String!) {
         referrerUrl
         currentSubtotalPriceSet { shopMoney { amount currencyCode } }
         currentTotalPriceSet { shopMoney { amount currencyCode } }
+        originalTotalPriceSet { shopMoney { amount currencyCode } }
+        totalRefundedSet { shopMoney { amount currencyCode } }
         currentTotalTaxSet { shopMoney { amount currencyCode } }
       }
     }
@@ -157,6 +161,8 @@ def fetch_orders(
                     "currency": currency,
                     "subtotal_price": money_amount(node, "currentSubtotalPriceSet"),
                     "total_price": money_amount(node, "currentTotalPriceSet"),
+                    "original_total_price": money_amount(node, "originalTotalPriceSet"),
+                    "total_refunded": money_amount(node, "totalRefundedSet"),
                     "total_tax": money_amount(node, "currentTotalTaxSet"),
                     "financial_status": node.get("displayFinancialStatus", ""),
                     "fulfillment_status": node.get("displayFulfillmentStatus", ""),

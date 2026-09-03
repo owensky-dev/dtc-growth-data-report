@@ -74,8 +74,10 @@ When customizing reports:
 - Use GA4 for sessions, engagement, landing page behavior, and funnel events.
 - Derive Shopify report dates in the GA4 Property IANA timezone; never truncate the UTC `createdAt` string into a report date.
 - Keep Shopify business totals as all paid, non-test, non-cancelled orders. For browser purchase integrity, compare only Online Store orders (`source_name=web`) with GA4 `ecommercePurchases`/`totalRevenue`; report Shop/POS/draft/app/offsite orders separately without removing them from business revenue or order KPIs.
-- Persist Online Store count/revenue, offsite count/revenue, residual purchase count/revenue gap, and tracking rate in weekly JSON and show the result in data health.
-- Treat an aggregate gap as an alert, not proof of a specific missing order. Require BigQuery `transaction_id` versus Shopify paid-order reconciliation before naming affected orders or handing recovery to `$ga4-data-analysis`.
+- Persist Online Store count/revenue, offsite count/revenue, and the aggregate purchase count/revenue gap in weekly JSON. Name the aggregate GA4-purchases/Shopify-orders value `aggregate_purchase_ratio`; it is an alert ratio, never a tracking or capture rate.
+- Consume `data/processed/purchase_reconciliation.json` from `$ga4-data-analysis` for exact purchase/refund health. Publish purchase capture and refund coverage only when its period matches the report, every BigQuery daily table is present, its Shopify current-paid snapshot matches the report, and `reconciliation.publishable=true`.
+- Define purchase capture against unique `transaction_id` values for eligible Online Store orders, including orders later marked `PARTIALLY_REFUNDED` or `REFUNDED`. Report current-paid coverage and refund-event coverage separately so offsetting anomalies cannot hide behind aggregate parity.
+- Treat an aggregate gap as an alert, not proof of a specific missing order. Require BigQuery `transaction_id` versus Shopify order reconciliation before naming affected orders or handing recovery to `$ga4-data-analysis`.
 - Keep this reporting skill read-only. Never send Measurement Protocol events or repair tracking automatically.
 - Fetch GA4 `add_to_cart` and `begin_checkout` with the `date` dimension so weekly funnel stages use the same current and previous periods as the rest of the report.
 - Use Google Ads for spend, clicks, conversions, conversion value, ROAS, CPA, search terms, and ad landing URLs.
@@ -100,10 +102,12 @@ Before final handoff:
 - Confirm Shopify revenue/orders came from `shopify_sales_by_day_90d.csv` or an equivalent connector-materialized daily file, so zero-order days are distinguishable from missing Shopify data.
 - Confirm Shopify order dates use `GA4_PROPERTY_TIMEZONE`, daily totals exclude non-paid/test/cancelled orders, and order-level rows include `source_name` for Online Store/offsite purchase integrity.
 - Confirm order-level paid count/revenue reconciles to `shopify_sales_by_day_90d.csv` for both comparison weeks; fail closed on partial, stale, or mismatched Shopify raw data.
+- Confirm `shopify_orders_90d.csv` includes `original_total_price` and `total_refunded` before interpreting refunded or partially-refunded orders.
 - Confirm HTML/Markdown reports exist and are non-empty.
 - Confirm conversion rates and CTR are percentages, not decimals.
 - Confirm GA4 funnel rows compare dated `add_to_cart` and `begin_checkout` values for the current and previous aligned weeks.
-- Confirm the report compares Shopify Online Store paid orders with GA4 `ecommercePurchases`, reports offsite orders separately, leads with the residual risk when counts differ, and explicitly requires transaction-level reconciliation before recovery.
+- Confirm the report compares Shopify Online Store current paid orders with GA4 aggregates only as an alert, never labels that ratio a tracking rate, reports offsite orders separately, and explicitly requires transaction-level reconciliation before recovery.
+- If canonical reconciliation is present, confirm the exact report period, complete BigQuery daily-table coverage, matching Shopify snapshot, unique-ID purchase capture, separate refund coverage, duplicates/blanks, and revenue bridge. If any gate fails, suppress coverage rates.
 - Confirm Google Ads cost is in account currency units, not micros.
 - Confirm campaign-level Google Ads coverage includes Performance Max and that account totals are not derived only from `ad_group` rows.
 - Confirm sitewide ROI equals Shopify revenue divided by Google Ads spend, and GSC clicks appear in the core KPI table.
